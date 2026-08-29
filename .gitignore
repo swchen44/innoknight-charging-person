@@ -1,0 +1,17 @@
+# 環境設定——帳密絕不進版控（帳密請用 GitHub Secrets）
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# 編輯器與作業系統
+.DS_Store
+.idea/
+.vscode/
