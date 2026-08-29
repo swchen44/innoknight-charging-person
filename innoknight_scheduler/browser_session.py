@@ -276,6 +276,36 @@ def start_chromium(config: BrowserLoginConfig) -> subprocess.Popen[str]:
     )
 
 
+PAGE_STATE_SCRIPT = """
+(() => {
+  const pw = document.querySelector('input[type="password"]');
+  const inputs = Array.from(document.querySelectorAll('input'));
+  return {
+    url: location.href,
+    title: document.title,
+    inputCount: inputs.length,
+    // 只回報欄位值的「長度」，不回報內容——診斷是否成功填入而不洩漏憑證。
+    inputValueLengths: inputs.map(el => (el.value || '').length),
+    passwordFilledLength: pw ? (pw.value || '').length : null,
+    hasCaptcha: !!document.querySelector(
+      'iframe[src*="recaptcha"], .g-recaptcha, iframe[src*="hcaptcha"], iframe[src*="turnstile"]'
+    ),
+    bodyText: (document.body?.innerText || '').replace(/\\s+/g, ' ').slice(0, 800),
+  };
+})()
+""".strip()
+
+
+def _page_state(cdp: CdpClient) -> str:
+    """登入逾時的診斷：回傳頁面目前狀態（不含任何憑證內容）。"""
+
+    try:
+        state = cdp.evaluate(PAGE_STATE_SCRIPT)
+        return f"page state: {json.dumps(state, ensure_ascii=False)}"
+    except Exception as exc:  # noqa: BLE001 - 診斷路徑，任何失敗都不該蓋掉原始錯誤
+        return f"page state unavailable: {type(exc).__name__}"
+
+
 def _chrome_failure_details(process: subprocess.Popen[str]) -> str:
     """收殮死掉/起不來的 Chrome，回傳 exit code 與輸出尾段供除錯。
 
@@ -351,7 +381,7 @@ def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
             if isinstance(cookie, str) and "user=" in cookie:
                 return parse_user_cookie(cookie)
             time.sleep(2)
-        raise RuntimeError("Timed out waiting for InnoKnight browser login cookie")
+        raise RuntimeError(f"Timed out waiting for InnoKnight browser login cookie\n{_page_state(cdp)}")
     finally:
         cdp.close()
         if process is not None:
