@@ -341,6 +341,14 @@ PAGE_STATE_SCRIPT = """
     hasCaptcha: !!document.querySelector(
       'iframe[src*="recaptcha"], .g-recaptcha, iframe[src*="hcaptcha"], iframe[src*="turnstile"]'
     ),
+    // 只印 key 名與 value 長度，不印 value——診斷登入成功後 token 存哪。
+    cookieKeys: document.cookie.split('; ').map(c => c.split('=')[0]).filter(Boolean),
+    localStorage: Object.fromEntries(
+      Object.keys(localStorage).map(k => [k, (localStorage.getItem(k) || '').length])
+    ),
+    sessionStorage: Object.fromEntries(
+      Object.keys(sessionStorage).map(k => [k, (sessionStorage.getItem(k) || '').length])
+    ),
     // 每個 iframe 的來源與是否可見——recaptcha 的 bframe 可見 = 跳出了人機驗證挑戰。
     iframes: Array.from(document.querySelectorAll('iframe')).slice(0, 10).map(f => {
       const r = f.getBoundingClientRect();
