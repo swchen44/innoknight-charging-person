@@ -276,8 +276,15 @@ def _chrome_failure_details(process: subprocess.Popen[str]) -> str:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
         output, _ = process.communicate()
-    tail = "\n".join((output or "").splitlines()[-40:])
-    return f"chrome exit_code={process.returncode}\n--- chrome output (tail) ---\n{tail}"
+    lines = (output or "").splitlines()
+    # 「DevTools listening on …」等關鍵訊息出現在輸出開頭，尾段常是 dbus 噪音，
+    # 頭尾都要印。
+    head = "\n".join(lines[:20])
+    tail = "\n".join(lines[-20:]) if len(lines) > 20 else ""
+    return (
+        f"chrome exit_code={process.returncode}\n"
+        f"--- chrome output (head) ---\n{head}\n--- chrome output (tail) ---\n{tail}"
+    )
 
 
 def _fill_login_form(cdp: CdpClient, config: BrowserLoginConfig) -> None:

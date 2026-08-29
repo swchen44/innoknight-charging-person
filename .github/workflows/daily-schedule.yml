@@ -49,6 +49,21 @@ jobs:
           uv venv --python 3.12
           uv pip install -e .
 
+      - name: CDP smoke test（TEMP — Phase 2 診斷用，驗證通過後移除）
+        continue-on-error: true
+        run: |
+          xvfb-run -a "${{ steps.chrome.outputs.chrome-path }}" --no-sandbox --disable-dev-shm-usage \
+            --remote-debugging-port=9224 --remote-allow-origins='*' \
+            --user-data-dir=/tmp/chrome-smoke about:blank > /tmp/chrome-smoke.log 2>&1 &
+          ok=""
+          for i in $(seq 1 15); do
+            sleep 2
+            if curl -s http://127.0.0.1:9224/json/version; then echo; echo "CDP OK after $((i*2))s"; ok=1; break; fi
+          done
+          [ -n "$ok" ] || { echo "CDP never became ready after 30s"; curl -v http://127.0.0.1:9224/json/version || true; }
+          echo "--- chrome-smoke.log (head 40) ---"; head -40 /tmp/chrome-smoke.log
+          pkill -f "remote-debugging-port=9224" || true
+
       - name: Run daily charging schedule
         env:
           PYTHONUNBUFFERED: "1"
