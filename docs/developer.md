@@ -11,7 +11,7 @@ innoknight_scheduler/
 ├── scheduler.py         # 純函式：payload 組裝、過期清理判斷、重複預約判斷
 ├── client.py            # InnoKnight HTTP API client（read_balance / schedule_set / …）
 ├── crypto.py            # InnoKnight 通訊協定的 AES 加密層（協定常數來自網站前端）
-├── browser_session.py   # Xvfb + Chrome + CDP 登入流程；正式無人值守入口
+├── browser_session.py   # Chrome（--headless=new）+ CDP 登入流程；正式無人值守入口
 └── main.py              # direct API 登入入口（開發測試用，可能被 reCAPTCHA 擋）
 .github/workflows/
 ├── daily-schedule.yml   # 每日充電預約（workflow_dispatch；Phase 4 後加 schedule cron）
@@ -25,8 +25,9 @@ tests/
 
 `browser_session.main()` 是正式入口：
 
-1. `login_with_browser()` 用 `xvfb-run` 啟動 Chrome、透過 CDP 開啟登入頁、
-   `_fill_login_form()` 填表登入、輪詢 `document.cookie` 取得 `user` cookie。
+1. `login_with_browser()` 以 `--headless=new` 啟動 Chrome（Chrome 151+ 已移除有頭
+   模式的 CDP port，Xvfb 不再需要）、透過 CDP 開啟登入頁、`_fill_login_form()`
+   填表登入、輪詢 `document.cookie` 取得 `user` cookie。
 2. cookie 解析成 `InnoKnightSession`，掛到 `InnoKnightClient` 上。
 3. `run_daily_workflow()`（`automation.py`）執行純邏輯，透過 client 呼叫遠端 API。
 
@@ -72,8 +73,9 @@ CI（`ci.yml`）跑的就是上面三個指令，本機全綠 = CI 全綠。
 ### 整合測試 `tests/integration/`
 
 `test_live_browser_workflow.py` 需要真實帳號（環境變數 `INNOKNIGHT_USERNAME` /
-`INNOKNIGHT_PASSWORD` / `INNOKNIGHT_DEVICE_NAME`）與 Linux（xvfb-run + Chrome），
-缺任一項自動 skip；只做 dry-run，不改遠端資料。
+`INNOKNIGHT_PASSWORD` / `INNOKNIGHT_DEVICE_NAME`）與 Chrome
+（`INNOKNIGHT_CHROME_PATH` 或預設路徑），缺任一項自動 skip；
+只做 dry-run，不改遠端資料。
 
 它同時是 [plan.md](plan.md) Phase 2 的 go/no-go 驗證載體：在 GitHub Actions 上跑通
 = Actions 共用 IP 沒有被 InnoKnight 風控擋下。

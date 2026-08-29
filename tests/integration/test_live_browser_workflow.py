@@ -5,7 +5,7 @@
 
 執行條件（缺一即自動 skip）：
 - 環境變數 INNOKNIGHT_USERNAME / INNOKNIGHT_PASSWORD / INNOKNIGHT_DEVICE_NAME
-- 系統有 xvfb-run 與 Chrome（Linux；本機 macOS 會自動 skip）
+- Chrome 存在（INNOKNIGHT_CHROME_PATH 或預設路徑）；headless 模式不需要 Xvfb
 
 只做 dry-run（execute=False），絕不改動遠端資料。
 CI 的單元測試 job 不會執行本目錄（只跑 tests/unittest）。
@@ -14,7 +14,6 @@ CI 的單元測試 job 不會執行本目錄（只跑 tests/unittest）。
 from __future__ import annotations
 
 import os
-import shutil
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -29,6 +28,7 @@ from innoknight_scheduler.browser_session import (
 from innoknight_scheduler.client import InnoKnightClient
 
 REQUIRED_ENV = ("INNOKNIGHT_USERNAME", "INNOKNIGHT_PASSWORD", "INNOKNIGHT_DEVICE_NAME")
+_CHROME = os.getenv("INNOKNIGHT_CHROME_PATH", DEFAULT_CHROME_PATH)
 
 pytestmark = [
     pytest.mark.integration,
@@ -36,7 +36,7 @@ pytestmark = [
         any(not os.getenv(name) for name in REQUIRED_ENV),
         reason="需要 INNOKNIGHT_USERNAME/PASSWORD/DEVICE_NAME 環境變數",
     ),
-    pytest.mark.skipif(shutil.which("xvfb-run") is None, reason="需要 xvfb-run（Linux）"),
+    pytest.mark.skipif(not os.path.exists(_CHROME), reason=f"找不到 Chrome：{_CHROME}"),
 ]
 
 

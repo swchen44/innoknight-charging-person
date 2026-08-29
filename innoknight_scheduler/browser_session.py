@@ -43,7 +43,10 @@ class BrowserLoginConfig:
     timeout_seconds: int = 90
     chrome_path: str = DEFAULT_CHROME_PATH
     profile_dir: str = DEFAULT_PROFILE_DIR
-    headless: bool = False
+    # Chrome 151+ 已全面移除「有頭模式」的 --remote-debugging-port（連 Chromium
+    # 也是，2026-08 於 GH Actions 實測：headful 完全不起 DevTools server，
+    # --headless=new 2 秒就緒），headless 是唯一可行模式，預設開啟。
+    headless: bool = True
 
 
 def parse_user_cookie(cookie: str) -> InnoKnightSession:
@@ -231,14 +234,14 @@ class CdpClient:
             self._ws = None
 
 
-def start_chromium(config: BrowserLoginConfig) -> subprocess.Popen[str]:
-    """用 Xvfb 啟動 Chrome/Chromium 並開啟遠端除錯 CDP port。"""
+def build_chrome_command(config: BrowserLoginConfig) -> list[str]:
+    """組出啟動 Chrome/Chromium 的完整指令。
 
-    profile = Path(config.profile_dir)
-    profile.mkdir(parents=True, exist_ok=True)
+    headless（預設、現代 Chrome 唯一可行）直接啟動、不需要 Xvfb；
+    headful 保留 xvfb-run 包裝，僅供舊版 Chrome 在無螢幕環境使用。
+    """
+
     command = [
-        "xvfb-run",
-        "-a",
         config.chrome_path,
         "--no-sandbox",
         "--disable-dev-shm-usage",
@@ -248,7 +251,18 @@ def start_chromium(config: BrowserLoginConfig) -> subprocess.Popen[str]:
     ]
     if config.headless:
         command.append("--headless=new")
+    else:
+        command = ["xvfb-run", "-a", *command]
     command.append("about:blank")
+    return command
+
+
+def start_chromium(config: BrowserLoginConfig) -> subprocess.Popen[str]:
+    """啟動 Chrome/Chromium 並開啟遠端除錯 CDP port。"""
+
+    profile = Path(config.profile_dir)
+    profile.mkdir(parents=True, exist_ok=True)
+    command = build_chrome_command(config)
     # xvfb-run only kills its Xvfb child once the wrapped chromium process
     # exits on its own; terminating xvfb-run directly (as cleanup below
     # does) skips that step and leaks an orphaned Xvfb process. Running it

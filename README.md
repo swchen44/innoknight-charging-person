@@ -11,7 +11,7 @@ iot.innoknight.com，替你建立**隔天 00:30–06:00** 的離峰充電預約�
 
 每天台北時間**前一晚 22:05**（UTC cron `5 14 * * *`）觸發：
 
-1. 用 Xvfb + Chrome（CDP）登入 InnoKnight 網站。
+1. 用 Chrome（`--headless=new` + CDP）登入 InnoKnight 網站。
 2. 清理過期的一次性舊預約（保留最近一筆）。
 3. 若**明天**尚無 00:30–06:00 預約、且充電樁狀態為「充電樁已就緒」，就自動建立。
 

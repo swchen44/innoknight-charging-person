@@ -6,6 +6,9 @@
 #   target_date = 明天——結構性避開 GitHub 排程觸發器最高 2 小時的延遲。
 #   排程觸發一律視為正式執行（--execute）。
 #
+# 瀏覽器：Chrome 151+ 已移除有頭模式的 --remote-debugging-port（2026-08 實測），
+# 程式以 --headless=new 啟動，不需要 Xvfb。
+#
 # 供應鏈規則：所有第三方 Action 釘死完整 commit SHA，permissions 最小化。
 # 公開 repo 注意：本 workflow 的 log 全世界可讀；裝置名稱屬個人資訊，
 # 因此放 Secrets（自動遮罩），不放 Variables。
@@ -41,46 +44,10 @@ jobs:
       - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         id: chrome
 
-      - name: Install xvfb
-        run: sudo apt-get update && sudo apt-get install -y xvfb
-
       - name: Install package
         run: |
           uv venv --python 3.12
           uv pip install -e .
-
-      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
-        id: chromium
-        with:
-          chrome-version: latest
-
-      - name: CDP smoke test（TEMP — Phase 2 診斷用，驗證通過後移除）
-        continue-on-error: true
-        run: |
-          test_cdp () {
-            name="$1"; bin="$2"; shift 2
-            echo "=== [$name] $("$bin" --version 2>/dev/null || echo version-unknown) ==="
-            xvfb-run -a "$bin" "$@" --no-sandbox --disable-dev-shm-usage \
-              --remote-debugging-port=9224 --remote-allow-origins='*' \
-              --user-data-dir="/tmp/smoke-$name" about:blank > "/tmp/smoke-$name.log" 2>&1 &
-            ok=""
-            for i in $(seq 1 10); do
-              sleep 2
-              if curl -s http://127.0.0.1:9224/json/version >/dev/null; then ok="$((i*2))"; break; fi
-            done
-            if [ -n "$ok" ]; then
-              echo "[$name] CDP OK after ${ok}s: $(curl -s http://127.0.0.1:9224/json/version | head -c 200)"
-            else
-              echo "[$name] CDP FAILED (20s)"
-              grep -im3 "devtools" "/tmp/smoke-$name.log" || echo "[$name] no DevTools line in output"
-            fi
-            pkill -f "remote-debugging-port=9224" 2>/dev/null || true
-            sleep 1
-          }
-          test_cdp branded-headful "${{ steps.chrome.outputs.chrome-path }}" || true
-          test_cdp branded-headless "${{ steps.chrome.outputs.chrome-path }}" --headless=new || true
-          [ -x /usr/bin/google-chrome ] && { test_cdp system-headful /usr/bin/google-chrome || true; }
-          test_cdp chromium-headful "${{ steps.chromium.outputs.chrome-path }}" || true
 
       - name: Run daily charging schedule
         env:

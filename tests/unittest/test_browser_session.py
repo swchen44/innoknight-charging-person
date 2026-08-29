@@ -7,10 +7,30 @@ import pytest
 
 from innoknight_scheduler.browser_session import (
     NOTIFY_ACTIVE_ELEMENT_SCRIPT,
+    BrowserLoginConfig,
+    build_chrome_command,
     build_click_login_script,
     build_focus_script,
     parse_user_cookie,
 )
+
+
+def test_chrome_command_defaults_to_headless_without_xvfb() -> None:
+    # Chrome 151+ 只有 --headless=new 還支援 --remote-debugging-port（實測紀錄
+    # 見 design.md §4），headless 是預設且不需要 xvfb-run 包裝。
+    command = build_chrome_command(BrowserLoginConfig(username="u", password="p"))
+
+    assert command[0] != "xvfb-run"
+    assert "--headless=new" in command
+    assert "--remote-debugging-port=9224" in command
+    assert command[-1] == "about:blank"
+
+
+def test_chrome_command_headful_wraps_with_xvfb_run() -> None:
+    command = build_chrome_command(BrowserLoginConfig(username="u", password="p", headless=False))
+
+    assert command[:2] == ["xvfb-run", "-a"]
+    assert "--headless=new" not in command
 
 
 def test_parse_user_cookie_extracts_session_without_logging_full_cookie() -> None:

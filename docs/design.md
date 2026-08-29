@@ -121,10 +121,15 @@ flowchart TD
 2. **UTC cron 是唯一事實來源**。台北是 UTC+8、全年無日光節約時間，`5 14 * * *`（UTC）
    恆等於台北 22:05，這是恆定的數學事實。`on.schedule.timezone` 欄位（GitHub 2026/3 新功能）
    只能當提高可讀性的輔助，且要實測過才加，不預設依賴。
-3. **瀏覽器用 runner 預裝的 Google Chrome 或 `browser-actions/setup-chrome`**。
+3. **瀏覽器用 `browser-actions/setup-chrome`（Chrome for Testing）**。
    Ubuntu 的 `chromium-browser` apt 套件是 snap wrapper，runner 沒有可用的 snapd，根本裝不起來。
-   `INNOKNIGHT_CHROME_PATH` 指向實測確認的路徑並固定下來。
-4. **Xvfb 需另外安裝**：`sudo apt-get update && sudo apt-get install -y xvfb`。
+   `INNOKNIGHT_CHROME_PATH` 由 workflow 帶入 setup-chrome 的輸出路徑。
+4. **必須用 `--headless=new`，Xvfb 已不需要**（2026-08-29 於 GH Actions 實測修正原設計）。
+   原設計沿用「headless: false + Xvfb 降低被判定機器人機率」，但實測發現 Chrome 151+
+   已**全面移除有頭模式的 `--remote-debugging-port`**（Chrome for Testing 152、系統
+   Chrome 151、Chromium 154 的有頭模式連 DevTools server 都不啟動；`--headless=new`
+   則 2 秒就緒）。headless=new 與有頭模式是同一引擎，指紋差異遠小於舊版 headless；
+   會不會因此被 InnoKnight 風控擋下，正是 §6 go/no-go 要驗證的問題。
 5. **密碼絕不以字串內嵌進要執行的 JS**。現有 `build_login_script()` 用 `json.dumps()` 把密碼包進
    JS 表達式；GitHub secret masking 是字面比對，JSON/Unicode 跳脫後不再等於 secret 原文，
    masking 會失效，且 CDP 錯誤訊息可能把整段表達式（含密碼）印進 log。
