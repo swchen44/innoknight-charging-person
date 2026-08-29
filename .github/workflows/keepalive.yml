@@ -1,0 +1,40 @@
+# keepalive：根治「公開 repo 60 天無活動 → scheduled workflow 被自動停用」的無聲失效。
+#
+# GitHub 規則：公開 repo 連續 60 天沒有「活動」（push/release/PR，而排程執行本身不算），
+# 會自動停用 schedule 觸發（daily-schedule 也會一起被停），且停用是無聲的。
+# 對策：每月 1、15 號自動 push 一個時間戳 commit，重置這個 60 天計時（間隔約 15 天，
+# 遠小於 60 天，即使某次漏跑也有足夠餘裕）。任何 commit 都會一併重置 daily-schedule
+# 與本 workflow 自己的計時，形成自我維持。
+name: keepalive
+
+on:
+  schedule:
+    - cron: "17 3 1,15 * *"  # 每月 1、15 號 UTC 03:17（錯開整點尖峰）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Refresh activity timestamp
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/last-activity.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/last-activity.txt
+          # [skip ci]：這個純時間戳 commit 不需要跑 CI（GITHUB_TOKEN 的 push 本就
+          # 不會觸發 workflow，加註記讓意圖明確、且未來改用 PAT 也安全）。
+          git commit -m "chore(keepalive): 重置排程 60 天停用計時 [skip ci]" || {
+            echo "timestamp unchanged; nothing to push"; exit 0;
+          }
+          git push
