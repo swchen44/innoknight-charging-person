@@ -6,8 +6,8 @@
 #   target_date = 明天——結構性避開 GitHub 排程觸發器最高 2 小時的延遲。
 #   排程觸發一律視為正式執行（--execute）。
 #
-# 瀏覽器：Chrome 151+ 已移除有頭模式的 --remote-debugging-port（2026-08 實測），
-# 程式以 --headless=new 啟動，不需要 Xvfb。
+# 瀏覽器：預設 headful（指紋較真實，為了通過 reCAPTCHA），需要 Xvfb 提供虛擬顯示；
+# 程式已自動帶入 --disable-gpu（runner 無 GPU，headful 少了它會卡 CDP 逾時，2026-08 實測）。
 #
 # 供應鏈規則：所有第三方 Action 釘死完整 commit SHA，permissions 最小化。
 # 公開 repo 注意：本 workflow 的 log 全世界可讀；裝置名稱屬個人資訊，
@@ -43,6 +43,9 @@ jobs:
 
       - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         id: chrome
+
+      - name: Install xvfb（headful 需要虛擬顯示）
+        run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Install package
         run: |

@@ -124,12 +124,12 @@ flowchart TD
 3. **瀏覽器用 `browser-actions/setup-chrome`（Chrome for Testing）**。
    Ubuntu 的 `chromium-browser` apt 套件是 snap wrapper，runner 沒有可用的 snapd，根本裝不起來。
    `INNOKNIGHT_CHROME_PATH` 由 workflow 帶入 setup-chrome 的輸出路徑。
-4. **必須用 `--headless=new`，Xvfb 已不需要**（2026-08-29 於 GH Actions 實測修正原設計）。
-   原設計沿用「headless: false + Xvfb 降低被判定機器人機率」，但實測發現 Chrome 151+
-   已**全面移除有頭模式的 `--remote-debugging-port`**（Chrome for Testing 152、系統
-   Chrome 151、Chromium 154 的有頭模式連 DevTools server 都不啟動；`--headless=new`
-   則 2 秒就緒）。headless=new 與有頭模式是同一引擎，指紋差異遠小於舊版 headless；
-   會不會因此被 InnoKnight 風控擋下，正是 §6 go/no-go 要驗證的問題。
+4. **用 headful（headless: false）+ Xvfb + `--disable-gpu`**（2026-08-29 實測定案，
+   完整證據見 [PDCA.md](PDCA.md)）。沿用原專案「headful 降低被判定機器人機率」的用意；
+   headful 在 GH Actions 無頭環境需要 Xvfb 提供虛擬顯示，且**必須**加 `--disable-gpu`
+   （runner 無 GPU，headful Chrome 少了它會卡在 GPU 初始化直到 CDP 逾時——這一點曾讓
+   中途誤判成「Chrome 移除了 headful CDP」，經四變體對照實驗推翻）。是否能因此通過
+   InnoKnight 的 reCAPTCHA，正是 §6 go/no-go 要驗證的問題。
 5. **密碼絕不以字串內嵌進要執行的 JS**。現有 `build_login_script()` 用 `json.dumps()` 把密碼包進
    JS 表達式；GitHub secret masking 是字面比對，JSON/Unicode 跳脫後不再等於 secret 原文，
    masking 會失效，且 CDP 錯誤訊息可能把整段表達式（含密碼）印進 log。

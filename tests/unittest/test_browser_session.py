@@ -15,22 +15,24 @@ from innoknight_scheduler.browser_session import (
 )
 
 
-def test_chrome_command_defaults_to_headless_without_xvfb() -> None:
-    # Chrome 151+ 只有 --headless=new 還支援 --remote-debugging-port（實測紀錄
-    # 見 design.md §4），headless 是預設且不需要 xvfb-run 包裝。
+def test_chrome_command_defaults_to_headful_under_xvfb() -> None:
+    # 預設 headful（headless=False）：指紋較真實、為了通過 reCAPTCHA（見 PDCA.md）。
+    # headful 需要 xvfb-run 提供虛擬顯示，且必帶 --disable-gpu（否則卡 GPU 初始化）。
     command = build_chrome_command(BrowserLoginConfig(username="u", password="p"))
 
-    assert command[0] != "xvfb-run"
-    assert "--headless=new" in command
+    assert command[:2] == ["xvfb-run", "-a"]
+    assert "--headless=new" not in command
+    assert "--disable-gpu" in command
     assert "--remote-debugging-port=9224" in command
     assert command[-1] == "about:blank"
 
 
-def test_chrome_command_headful_wraps_with_xvfb_run() -> None:
-    command = build_chrome_command(BrowserLoginConfig(username="u", password="p", headless=False))
+def test_chrome_command_headless_skips_xvfb_but_keeps_disable_gpu() -> None:
+    command = build_chrome_command(BrowserLoginConfig(username="u", password="p", headless=True))
 
-    assert command[:2] == ["xvfb-run", "-a"]
-    assert "--headless=new" not in command
+    assert command[0] != "xvfb-run"
+    assert "--headless=new" in command
+    assert "--disable-gpu" in command
 
 
 def test_parse_user_cookie_extracts_session_without_logging_full_cookie() -> None:

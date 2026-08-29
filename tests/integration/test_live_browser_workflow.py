@@ -5,7 +5,7 @@
 
 執行條件（缺一即自動 skip）：
 - 環境變數 INNOKNIGHT_USERNAME / INNOKNIGHT_PASSWORD / INNOKNIGHT_DEVICE_NAME
-- Chrome 存在（INNOKNIGHT_CHROME_PATH 或預設路徑）；headless 模式不需要 Xvfb
+- Chrome 存在（INNOKNIGHT_CHROME_PATH 或預設路徑）；預設 headful 需要 Xvfb（Linux）
 
 只做 dry-run（execute=False），絕不改動遠端資料。
 CI 的單元測試 job 不會執行本目錄（只跑 tests/unittest）。

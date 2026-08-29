@@ -43,10 +43,12 @@ class BrowserLoginConfig:
     timeout_seconds: int = 90
     chrome_path: str = DEFAULT_CHROME_PATH
     profile_dir: str = DEFAULT_PROFILE_DIR
-    # Chrome 151+ 已全面移除「有頭模式」的 --remote-debugging-port（連 Chromium
-    # 也是，2026-08 於 GH Actions 實測：headful 完全不起 DevTools server，
-    # --headless=new 2 秒就緒），headless 是唯一可行模式，預設開啟。
-    headless: bool = True
+    # 預設 headful（headless=False）：headful 的瀏覽器指紋比 headless 真實得多，
+    # 是通過 InnoKnight reCAPTCHA 的關鍵（見 docs/PDCA.md）。headful 在 GH Actions
+    # 無頭環境需要 Xvfb 提供虛擬顯示，且**必須**用 --disable-gpu（runner 無 GPU，
+    # headful Chrome 預設會卡在 GPU 初始化直到 CDP 逾時；2026-08 實測 --disable-gpu
+    # 一加即 1 秒起 CDP）。這些旗標由 build_chrome_command 自動帶入。
+    headless: bool = False
 
 
 def parse_user_cookie(cookie: str) -> InnoKnightSession:
@@ -277,22 +279,25 @@ class CdpClient:
 
 
 def build_chrome_command(config: BrowserLoginConfig) -> list[str]:
-    """組出啟動 Chrome/Chromium 的完整指令。
+    """組出啟動 Chrome 的完整指令。
 
-    headless（預設、現代 Chrome 唯一可行）直接啟動、不需要 Xvfb；
-    headful 保留 xvfb-run 包裝，僅供舊版 Chrome 在無螢幕環境使用。
+    headful（預設）以 xvfb-run 包裝提供虛擬顯示；headless 直接啟動。
+    --disable-gpu 對兩種模式都加：runner 無 GPU，headful 少了它會卡在
+    GPU 初始化直到 CDP 逾時（2026-08 GH Actions 實測，見 docs/PDCA.md）。
     """
 
     command = [
         config.chrome_path,
         "--no-sandbox",
         "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-default-browser-check",
         f"--remote-debugging-port={config.cdp_port}",
         "--remote-allow-origins=*",
         f"--user-data-dir={config.profile_dir}",
         # 抹掉 navigator.webdriver=true 的自動化標記——reCAPTCHA 風控最基本的
-        # 機器人判定信號之一（UA 的 HeadlessChrome 字樣另在連線後以
-        # Network.setUserAgentOverride 處理）。
+        # 機器人判定信號之一。
         "--disable-blink-features=AutomationControlled",
     ]
     if config.headless:
