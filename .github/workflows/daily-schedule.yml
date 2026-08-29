@@ -2,9 +2,11 @@
 #
 # - 手動觸發（workflow_dispatch）：預設 dry-run，勾選 apply 才會真的寫入。
 #   Phase 2 的 go/no-go 驗證就是手動觸發 dry-run。
-# - 排程觸發（schedule）：Phase 4 才解除註解。UTC 14:05 = 台北 22:05（前一晚），
+# - 排程觸發（schedule）：Phase 4 已啟用。UTC 14:05 = 台北 22:05（前一晚），
 #   target_date = 明天——結構性避開 GitHub 排程觸發器最高 2 小時的延遲。
 #   排程觸發一律視為正式執行（--execute）。
+#   辨識期：充電時段用 Variables 設為 07:00-10:00（非離峰），與原自管主機的
+#   00:30-06:00 區分，供人工核對雲端版是否設定成功；兩邊並行、原主機不停。
 #
 # 瀏覽器：預設 headful（指紋較真實，為了通過 reCAPTCHA），需要 Xvfb 提供虛擬顯示；
 # 程式已自動帶入 --disable-gpu（runner 無 GPU，headful 少了它會卡 CDP 逾時，2026-08 實測）。
@@ -21,9 +23,8 @@ on:
         description: "實際寫入 InnoKnight（不勾 = dry-run，只讀不寫）"
         type: boolean
         default: false
-  # Phase 4 啟用（解除下面三行註解）：
-  # schedule:
-  #   - cron: "5 14 * * *"  # UTC = 台北 22:05（前一晚）
+  schedule:
+    - cron: "5 14 * * *"  # UTC = 台北 22:05（前一晚），target_date = 明天
 
 permissions:
   contents: read
