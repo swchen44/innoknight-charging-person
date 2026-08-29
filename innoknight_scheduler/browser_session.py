@@ -41,6 +41,9 @@ class BrowserLoginConfig:
     cdp_port: int = DEFAULT_CDP_PORT
     login_url: str = LOGIN_URL
     timeout_seconds: int = 90
+    # 每次登入嘗試等回應的秒數，與最多嘗試次數（reCAPTCHA 間歇性 → 重載重試）。
+    attempt_timeout_seconds: int = 25
+    max_login_attempts: int = 3
     chrome_path: str = DEFAULT_CHROME_PATH
     profile_dir: str = DEFAULT_PROFILE_DIR
     # 預設 headful（headless=False）：headful 的瀏覽器指紋比 headless 真實得多，
@@ -248,6 +251,16 @@ class CdpClient:
 
         self.call("Input.insertText", {"text": text})
 
+    def navigate(self, url: str) -> None:
+        """重新導向目前分頁到指定 URL（重試登入前重載頁面用）。"""
+
+        self.call("Page.navigate", {"url": url})
+
+    def clear_events(self) -> None:
+        """清掉收集到的 CDP 事件（重試前避免讀到上一輪的登入回應）。"""
+
+        self._events.clear()
+
     def find_response(self, url_substring: str) -> tuple[int | None, str | None]:
         """從收集到的 Network 事件找出指定 API 的回應（status, body）。
 
@@ -444,12 +457,58 @@ def _fill_login_form(cdp: CdpClient, config: BrowserLoginConfig) -> None:
     print(f"login submit target: {clicked.get('clicked') or clicked.get('submitted')}")
 
 
+def _session_from_login_response(cdp: CdpClient) -> tuple[InnoKnightSession | None, str]:
+    """從 get_end_user_token 的回應直接組出 session，不依賴前端寫 cookie 的時機。
+
+    回傳 (session 或 None, verdict)：
+    - ("ok")   成功且拿到 uuid/token
+    - ("rejected") success=false（reCAPTCHA/風控未通過，或憑證錯誤）
+    - ("pending")  尚未收到回應，或回應成功但欄位不齊，應繼續等
+    """
+
+    status, body = cdp.find_response("get_end_user_token")
+    if status is None or not body:
+        return (None, "pending")
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return (None, "pending")
+    if not data.get("success"):
+        return (None, "rejected")
+    user_id = data.get("uuid") or data.get("user_id") or data.get("id")
+    token = data.get("token")
+    if not user_id or not token:
+        return (None, "pending")
+    return (InnoKnightSession(user_id=str(user_id), token=str(token), raw_user=data), "ok")
+
+
+def _attempt_login(
+    cdp: CdpClient, config: BrowserLoginConfig, *, timeout: float
+) -> tuple[InnoKnightSession | None, str]:
+    """填表送出一次，等這一輪的登入結果。回傳 (session 或 None, verdict)。"""
+
+    _fill_login_form(cdp, config)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        session, verdict = _session_from_login_response(cdp)
+        if verdict == "ok" and session is not None:
+            return (session, "ok")
+        if verdict == "rejected":
+            return (None, "rejected")
+        # 後備：前端若已把 session 寫進 user cookie，也接受。
+        cookie = cdp.evaluate("document.cookie")
+        if isinstance(cookie, str) and "user=" in cookie:
+            return (parse_user_cookie(cookie), "ok")
+        time.sleep(2)
+    return (None, "timeout")
+
+
 def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
     """透過 Chrome/CDP 登入 InnoKnight 並回傳瀏覽器 session。
 
-    此函式是無人值守入口：啟動瀏覽器、填表登入、輪詢 `document.cookie`，
-    取得 `user` cookie 後立刻清理 CDP 連線與瀏覽器程序。任何階段失敗都會
-    丟出例外，避免後續預約流程使用錯誤狀態。
+    此函式是無人值守入口：以 headful Chrome（真實指紋）登入、直接從登入 API
+    回應取得 session，並在 reCAPTCHA 間歇性拒絕時重載頁面重試數次（見
+    docs/PDCA.md）。任何階段失敗都會丟出例外，避免後續預約流程使用錯誤狀態。
     """
 
     process: subprocess.Popen[str] | None = None
@@ -461,20 +520,27 @@ def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
         except RuntimeError as exc:
             raise RuntimeError(f"{exc}\n{_chrome_failure_details(process)}") from exc
         # headless 的原生 UA 帶「HeadlessChrome」，是風控/reCAPTCHA 的顯性機器人
-        # 標記；改寫成一般 Chrome 的字樣（版本號保留瀏覽器自己的值，不會漂移）。
+        # 標記；headful 沒有這個字樣，replace 為 no-op，仍統一改寫以防萬一。
         user_agent = cdp.browser_user_agent().replace("HeadlessChrome", "Chrome") or None
         cdp.open(config.login_url, user_agent=user_agent)
         time.sleep(3)
-        # 先用 CDP 取得 browser session；排程 table 內容一律改由
-        # read_balance endpoint 回傳 JSON 驗證，避免依賴畫面文字。
-        _fill_login_form(cdp, config)
-        deadline = time.monotonic() + config.timeout_seconds
-        while time.monotonic() < deadline:
-            cookie = cdp.evaluate("document.cookie")
-            if isinstance(cookie, str) and "user=" in cookie:
-                return parse_user_cookie(cookie)
-            time.sleep(2)
-        raise RuntimeError(f"Timed out waiting for InnoKnight browser login cookie\n{_page_state(cdp)}")
+        # reCAPTCHA 對 GH Actions datacenter IP 是間歇性放行（實測見 PDCA.md），
+        # 因此重載頁面重試——每次重載都會取得新的 reCAPTCHA 挑戰與評分。
+        for attempt in range(1, config.max_login_attempts + 1):
+            session, verdict = _attempt_login(cdp, config, timeout=config.attempt_timeout_seconds)
+            if verdict == "ok" and session is not None:
+                if attempt > 1:
+                    print(f"login succeeded on attempt {attempt}/{config.max_login_attempts}")
+                return session
+            if attempt < config.max_login_attempts:
+                print(f"login attempt {attempt}/{config.max_login_attempts} {verdict}; reloading and retrying")
+                cdp.clear_events()
+                cdp.navigate(config.login_url)
+                time.sleep(3)
+        raise RuntimeError(
+            f"Login failed after {config.max_login_attempts} attempts "
+            f"(last verdict: {verdict})\n{_page_state(cdp)}"
+        )
     finally:
         cdp.close()
         if process is not None:
