@@ -175,7 +175,7 @@ class CdpClient:
             time.sleep(0.5)
         raise RuntimeError(f"CDP port {self.port} did not become ready: {last_error}")
 
-    def open(self, url: str) -> None:
+    def open(self, url: str, *, user_agent: str | None = None) -> None:
         self.wait_until_ready(timeout_seconds=self.timeout)
         quoted_url = urllib.parse.quote(url, safe=":/#?&=")
         response = requests.put(f"{self.base_url}/json/new?{quoted_url}", timeout=self.timeout)
@@ -195,7 +195,18 @@ class CdpClient:
         self._ws = websocket.create_connection(target["webSocketDebuggerUrl"], timeout=self.timeout)
         self.call("Page.enable")
         self.call("Runtime.enable")
+        if user_agent:
+            self.call("Network.enable")
+            self.call("Network.setUserAgentOverride", {"userAgent": user_agent})
         self.call("Page.navigate", {"url": url})
+
+    def browser_user_agent(self) -> str:
+        """回傳瀏覽器的原生 User-Agent（來自 /json/version）。"""
+
+        response = requests.get(f"{self.base_url}/json/version", timeout=self.timeout)
+        response.raise_for_status()
+        value = response.json().get("User-Agent", "")
+        return value if isinstance(value, str) else ""
 
     def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if self._ws is None:
@@ -248,6 +259,10 @@ def build_chrome_command(config: BrowserLoginConfig) -> list[str]:
         f"--remote-debugging-port={config.cdp_port}",
         "--remote-allow-origins=*",
         f"--user-data-dir={config.profile_dir}",
+        # 抹掉 navigator.webdriver=true 的自動化標記——reCAPTCHA 風控最基本的
+        # 機器人判定信號之一（UA 的 HeadlessChrome 字樣另在連線後以
+        # Network.setUserAgentOverride 處理）。
+        "--disable-blink-features=AutomationControlled",
     ]
     if config.headless:
         command.append("--headless=new")
@@ -290,7 +305,19 @@ PAGE_STATE_SCRIPT = """
     hasCaptcha: !!document.querySelector(
       'iframe[src*="recaptcha"], .g-recaptcha, iframe[src*="hcaptcha"], iframe[src*="turnstile"]'
     ),
-    bodyText: (document.body?.innerText || '').replace(/\\s+/g, ' ').slice(0, 800),
+    // 每個 iframe 的來源與是否可見——recaptcha 的 bframe 可見 = 跳出了人機驗證挑戰。
+    iframes: Array.from(document.querySelectorAll('iframe')).slice(0, 10).map(f => {
+      const r = f.getBoundingClientRect();
+      return { src: (f.src || '').slice(0, 90), visible: r.width > 50 && r.height > 50 };
+    }),
+    // 頁面上所有可點目標的文字，確認登入送出鈕長什麼樣。
+    buttons: Array.from(document.querySelectorAll('button, input[type="submit"], a'))
+      .slice(0, 20).map(el => (el.innerText || el.value || '').trim().slice(0, 20)).filter(Boolean),
+    // 是否真的對後端發出過請求（只取路徑，不含參數）。
+    backendRequests: performance.getEntriesByType('resource')
+      .map(e => e.name).filter(n => n.includes('/backend/'))
+      .map(n => n.split('?')[0].slice(-60)).slice(-10),
+    bodyText: (document.body?.innerText || '').replace(/\\s+/g, ' ').slice(0, 600),
   };
 })()
 """.strip()
@@ -352,6 +379,8 @@ def _fill_login_form(cdp: CdpClient, config: BrowserLoginConfig) -> None:
     if not (isinstance(clicked, dict) and clicked.get("ok", False)):
         reason = clicked.get("reason") if isinstance(clicked, dict) else "unexpected_result"
         raise RuntimeError(f"Browser login submit failed: {reason}")
+    # 印出實際點擊的目標（按鈕文字，不含憑證），供逾時診斷比對。
+    print(f"login submit target: {clicked.get('clicked') or clicked.get('submitted')}")
 
 
 def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
@@ -370,7 +399,10 @@ def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
             cdp.wait_until_ready(timeout_seconds=30)
         except RuntimeError as exc:
             raise RuntimeError(f"{exc}\n{_chrome_failure_details(process)}") from exc
-        cdp.open(config.login_url)
+        # headless 的原生 UA 帶「HeadlessChrome」，是風控/reCAPTCHA 的顯性機器人
+        # 標記；改寫成一般 Chrome 的字樣（版本號保留瀏覽器自己的值，不會漂移）。
+        user_agent = cdp.browser_user_agent().replace("HeadlessChrome", "Chrome") or None
+        cdp.open(config.login_url, user_agent=user_agent)
         time.sleep(3)
         # 先用 CDP 取得 browser session；排程 table 內容一律改由
         # read_balance endpoint 回傳 JSON 驗證，避免依賴畫面文字。
