@@ -5,22 +5,34 @@
 
 ## 總覽
 
+> **2026-08-29 調整**：使用者決定 repo **公開**。公開 repo 的 Actions log 全世界可讀，
+> 因此原 Phase 3 的安全強化（密碼不內嵌 JS、exit code、Action 釘 SHA）**提前到
+> Phase 1 一併完成**，必須先於任何真實執行。開發工具鏈定為 uv/uvx + ruff + mypy。
+
 ```
-Phase 1 移植程式碼 → Phase 2 手動觸發驗證（go/no-go）→ Phase 3 安全強化
+Phase 1 移植程式碼＋安全強化（✅ 完成）→ Phase 2 手動觸發驗證（go/no-go）
 → Phase 4 啟用每日排程 + 量測 → Phase 5（未來）模板化分享
 ```
 
-| Phase | 內容 | 預估工作量 |
+| Phase | 內容 | 狀態 |
 |---|---|---|
-| 1 | 從 scheduler repo 移植核心程式碼、建立 workflow 骨架 | 半天 |
-| 2 | `workflow_dispatch` 手動 dry-run，驗證 IP 風控（go/no-go） | 半天＋等待實測 |
-| 3 | 安全強化（密碼不內嵌 JS、exit code、Action 釘 SHA） | 半天–1 天 |
-| 4 | 啟用 `schedule` cron、`--apply` 上線、量測延遲與耗時 | 觀察 1–2 週 |
-| 5 | （通過驗證後才考慮）Template repository 分享給朋友 | 另行規劃 |
+| 1 | 移植核心程式碼、workflow、測試（tests/unittest + tests/integration） | ✅ |
+| 3（提前併入 1） | 安全強化：憑證不進 JS、exit code、Action 釘完整 SHA | ✅ |
+| 2 | `workflow_dispatch` 手動 dry-run，驗證 IP 風控（go/no-go） | ⬜ 待 Secrets |
+| 4 | 啟用 `schedule` cron、`--apply` 上線、量測延遲與耗時 | ⬜ |
+| 5 | （通過驗證後才考慮）Template repository 分享給朋友 | ⬜ |
 
 ---
 
-## Phase 1：移植程式碼與 workflow 骨架
+## Phase 1：移植程式碼與 workflow 骨架 ✅（已完成，含提前的安全強化）
+
+**實際完成內容**：核心模組移植完畢（`crypto.py` 保留、硬編碼裝置名稱清除、
+`target_date=明天` 支援）；`daily-schedule.yml`（workflow_dispatch，schedule 註解待
+Phase 4）與 `ci.yml`（uv + ruff + mypy + 單元測試）就緒；憑證改由 CDP
+`Input.insertText` 傳遞、不進任何 JS 字串；設定錯誤回非 0；第三方 Action 全數釘
+完整 commit SHA。測試拆為 `tests/unittest/`（25 個，CI 自動跑）與
+`tests/integration/`（需真實帳號，即 Phase 2 的驗證載體）。細節見
+[developer.md](developer.md)。以下為原始規劃內容，保留供追溯：
 
 **目標**：本 repo 具備可在 GitHub Actions 上執行 dry-run 的完整程式碼。
 
@@ -60,7 +72,7 @@ Phase 1 移植程式碼 → Phase 2 手動觸發驗證（go/no-go）→ Phase 3 
 **不通過（no-go）**：登入被擋 → **停止**，回設計文件重新評估（付費固定出口 IP／代理），
 不進入後續 Phase，也絕不進 Phase 5 分享。
 
-## Phase 3：安全強化
+## Phase 3：安全強化 ✅（已提前至 Phase 1 完成——repo 公開，log 全世界可讀，必須先於任何真實執行）
 
 **目標**：修掉研究文件評審點名的安全問題，未來情境二直接沿用。
 

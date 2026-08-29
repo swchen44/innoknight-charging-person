@@ -1,0 +1,65 @@
+# 每日充電預約 workflow（docs/design.md 場景一 Use Case 1）
+#
+# - 手動觸發（workflow_dispatch）：預設 dry-run，勾選 apply 才會真的寫入。
+#   Phase 2 的 go/no-go 驗證就是手動觸發 dry-run。
+# - 排程觸發（schedule）：Phase 4 才解除註解。UTC 14:05 = 台北 22:05（前一晚），
+#   target_date = 明天——結構性避開 GitHub 排程觸發器最高 2 小時的延遲。
+#   排程觸發一律視為正式執行（--execute）。
+#
+# 供應鏈規則：所有第三方 Action 釘死完整 commit SHA，permissions 最小化。
+# 公開 repo 注意：本 workflow 的 log 全世界可讀；裝置名稱屬個人資訊，
+# 因此放 Secrets（自動遮罩），不放 Variables。
+name: daily-schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "實際寫入 InnoKnight（不勾 = dry-run，只讀不寫）"
+        type: boolean
+        default: false
+  # Phase 4 啟用（解除下面三行註解）：
+  # schedule:
+  #   - cron: "5 14 * * *"  # UTC = 台北 22:05（前一晚）
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-schedule
+  cancel-in-progress: false
+
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        id: chrome
+
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Install package
+        run: |
+          uv venv --python 3.12
+          uv pip install -e .
+
+      - name: Run daily charging schedule
+        env:
+          INNOKNIGHT_USERNAME: ${{ secrets.INNOKNIGHT_USERNAME }}
+          INNOKNIGHT_PASSWORD: ${{ secrets.INNOKNIGHT_PASSWORD }}
+          INNOKNIGHT_DEVICE_NAME: ${{ secrets.INNOKNIGHT_DEVICE_NAME }}
+          INNOKNIGHT_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          INNOKNIGHT_START_TIME: ${{ vars.INNOKNIGHT_START_TIME || '00:30' }}
+          INNOKNIGHT_END_TIME: ${{ vars.INNOKNIGHT_END_TIME || '06:00' }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+            uv run python -m innoknight_scheduler.browser_session --execute
+          else
+            uv run python -m innoknight_scheduler.browser_session
+          fi

@@ -130,12 +130,22 @@ flowchart TD
    masking 會失效，且 CDP 錯誤訊息可能把整段表達式（含密碼）印進 log。
    改用 CDP `Runtime.callFunctionOn` 以 `arguments` 傳值，或 `Input.insertText` 逐欄輸入，
    並在錯誤處理路徑裁掉可能含表達式內容的欄位。這裡先修好，未來情境二直接沿用。
-6. **Secrets 與 Variables 分清楚**：只有帳號、密碼是機密（Secrets）；
-   `INNOKNIGHT_DEVICE_NAME`、充電時段是設定值（Variables）。
-7. **repo 設私有**。私有 repo 每月 2,000 分鐘免費額度，本用量約 1.5–3%；
-   且私有不受「公開 repo 60 天無活動自動停用排程」影響（該規則只看 push/PR 活動，
-   排程執行不算活動，停用時無明顯告警，對每日排程是無聲失效）。
-   代價是沒有免費 push protection，用「帳密一開始就不寫進任何檔案」的紀律補。
+6. **Secrets 與 Variables 分清楚，但界線以「公開後會不會洩漏個資」畫**：
+   帳號、密碼是機密（Secrets）；**裝置名稱也放 Secrets**——公開 repo 的 Actions log
+   全世界可讀，而裝置名稱是建案名稱＋車位號碼（住處線索），放 Secrets 才會被自動遮罩。
+   充電時段（`INNOKNIGHT_START_TIME` / `INNOKNIGHT_END_TIME`）不是個資，放 Variables。
+7. **repo 設公開**（使用者決定，2026-08-29）。研究文件原建議私有，改公開的代價與收穫：
+   - **收穫**：公開 repo 的 Actions 分鐘數免費不限量（不再受 2,000 分鐘/月限制）；
+     免費取得 push protection（自動擋下不小心 commit 的密鑰）。
+   - **代價 1——60 天無活動自動停用排程**：公開 repo 的 `schedule` workflow 在 60 天
+     沒有 push/PR 活動後會被自動停用，且排程執行本身不算活動，這是無聲失效。
+     對策：GitHub 停用前會寄警告信，收到就去 Actions 頁按「Enable」；
+     平常任何一次 push（維護、更新文件）都會重置計時。README 已記載。
+   - **代價 2——Actions log 全世界可讀**：因此「密碼不內嵌 JS」（第 5 條）在**第一次
+     真實執行之前**就必須完成（已完成，不是之後才補），且裝置名稱放 Secrets（第 6 條）、
+     log 不印 cookie/token 內容。
+   - **代價 3——`crypto.py` 協定常數公開**：其中的常數是從 InnoKnight 前端 JS 逆向的
+     協定實作，公開 repo 等於公開這件事（ToS 層面考量，不影響帳密安全），使用者已知情接受。
 8. **供應鏈防護**：所有第三方 Action（`actions/checkout`、`actions/setup-python`、
    `browser-actions/setup-chrome`）釘死在完整 commit SHA，不用 `@v4` 這種可變 tag；
    workflow `permissions:` 設到最小（`contents: read`）。
@@ -147,14 +157,14 @@ flowchart TD
 
 ## 5. 帳密與安全
 
-- 帳密只存在本 repo 的 GitHub Secrets：libsodium 加密後才離開瀏覽器、靜態儲存 AES-256、
-  只在 workflow 執行當下解密注入環境變數。
+- 帳密（與裝置名稱）只存在本 repo 的 GitHub Secrets：libsodium 加密後才離開瀏覽器、
+  靜態儲存 AES-256、只在 workflow 執行當下解密注入環境變數。
 - 只透過 GitHub 網頁 Settings 或 `gh secret set` 設定，**絕不 commit 填好帳密的 `.env`**。
 - GitHub 帳號**開啟 2FA**。
-- 生命週期：私有 repo 若改公開，過去所有 Actions log 一次全部變成全世界可讀；
-  刪 repo 不會讓 InnoKnight 密碼失效，真正的「退出」是去 InnoKnight 改密碼。
-- `crypto.py` 內含從 InnoKnight 前端 JS 逆向的協定常數——repo 保持私有也順帶避免公開這件事
-  （ToS 層面考量）。
+- **repo 是公開的，Actions log 全世界可讀**——所以：憑證絕不以字面出現在任何 JS 字串或
+  錯誤訊息（實作與對應測試見 [developer.md](developer.md)「安全規則」）；裝置名稱放
+  Secrets 讓它被自動遮罩；log 不印 cookie/token 內容。
+- 生命週期：刪 repo 不會讓 InnoKnight 密碼失效，真正的「退出」是去 InnoKnight 改密碼。
 
 ## 6. 風險與待驗證清單
 
@@ -172,9 +182,12 @@ flowchart TD
 
 | 資源 | 免費額度 | 本用量 |
 |---|---|---|
-| GitHub Actions（私有 repo） | 2,000 分鐘 / 月 | 每天 1 次、預估 1–2 分鐘 ≈ 30–60 分鐘 / 月（約 1.5–3%） |
-| GitHub Secrets | 免費、無上限 | 2 個（帳號、密碼） |
+| GitHub Actions（公開 repo） | 免費、不限分鐘數 | 每天 1 次、預估 1–2 分鐘；另有 push/PR 觸發的 CI |
+| GitHub Secrets | 免費、無上限 | 3 個（帳號、密碼、裝置名稱） |
 | Actions 執行紀錄保留 | 90 天 | 足夠人工回查 log |
+
+注意：公開 repo 換到不限分鐘數，但帶進「60 天無 push 活動自動停用排程」的無聲失效
+風險，對策見 §4 第 7 條。
 
 ## 8. 監控
 

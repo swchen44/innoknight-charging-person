@@ -1,0 +1,48 @@
+[project]
+name = "innoknight-charging-person"
+version = "0.1.0"
+description = "Nightly InnoKnight charging reservation automation on GitHub Actions"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.31",
+  "pycryptodome>=3.20",
+  "python-dotenv>=1.0",
+  "websocket-client>=1.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "types-requests>=2.31",
+]
+
+[project.scripts]
+innoknight-scheduler = "innoknight_scheduler.main:main"
+innoknight-browser-scheduler = "innoknight_scheduler.browser_session:main"
+
+[tool.setuptools.packages.find]
+include = ["innoknight_scheduler*"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: 需要真實 InnoKnight 帳號的整合測試（預設不在 CI 執行）",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["innoknight_scheduler"]
+
+[[tool.mypy.overrides]]
+# cryptography 只是 pycryptodome 不存在時的備援匯入，不在必要依賴裡。
+module = "cryptography.*"
+ignore_missing_imports = true
