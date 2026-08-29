@@ -262,6 +262,24 @@ def start_chromium(config: BrowserLoginConfig) -> subprocess.Popen[str]:
     )
 
 
+def _chrome_failure_details(process: subprocess.Popen[str]) -> str:
+    """收殮死掉/起不來的 Chrome，回傳 exit code 與輸出尾段供除錯。
+
+    Chrome 的 argv/env 不含任何憑證，輸出可以安全印進 log。
+    """
+
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        output, _ = process.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        output, _ = process.communicate()
+    tail = "\n".join((output or "").splitlines()[-40:])
+    return f"chrome exit_code={process.returncode}\n--- chrome output (tail) ---\n{tail}"
+
+
 def _fill_login_form(cdp: CdpClient, config: BrowserLoginConfig) -> None:
     """自動填入帳密並送出登入表單。
 
@@ -297,7 +315,10 @@ def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
     cdp = CdpClient(port=config.cdp_port)
     try:
         process = start_chromium(config)
-        cdp.wait_until_ready(timeout_seconds=30)
+        try:
+            cdp.wait_until_ready(timeout_seconds=30)
+        except RuntimeError as exc:
+            raise RuntimeError(f"{exc}\n{_chrome_failure_details(process)}") from exc
         cdp.open(config.login_url)
         time.sleep(3)
         # 先用 CDP 取得 browser session；排程 table 內容一律改由

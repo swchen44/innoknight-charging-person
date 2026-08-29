@@ -51,6 +51,7 @@ jobs:
 
       - name: Run daily charging schedule
         env:
+          PYTHONUNBUFFERED: "1"
           INNOKNIGHT_USERNAME: ${{ secrets.INNOKNIGHT_USERNAME }}
           INNOKNIGHT_PASSWORD: ${{ secrets.INNOKNIGHT_PASSWORD }}
           INNOKNIGHT_DEVICE_NAME: ${{ secrets.INNOKNIGHT_DEVICE_NAME }}
