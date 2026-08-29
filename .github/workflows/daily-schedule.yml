@@ -49,20 +49,38 @@ jobs:
           uv venv --python 3.12
           uv pip install -e .
 
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        id: chromium
+        with:
+          chrome-version: latest
+
       - name: CDP smoke test（TEMP — Phase 2 診斷用，驗證通過後移除）
         continue-on-error: true
         run: |
-          xvfb-run -a "${{ steps.chrome.outputs.chrome-path }}" --no-sandbox --disable-dev-shm-usage \
-            --remote-debugging-port=9224 --remote-allow-origins='*' \
-            --user-data-dir=/tmp/chrome-smoke about:blank > /tmp/chrome-smoke.log 2>&1 &
-          ok=""
-          for i in $(seq 1 15); do
-            sleep 2
-            if curl -s http://127.0.0.1:9224/json/version; then echo; echo "CDP OK after $((i*2))s"; ok=1; break; fi
-          done
-          [ -n "$ok" ] || { echo "CDP never became ready after 30s"; curl -v http://127.0.0.1:9224/json/version || true; }
-          echo "--- chrome-smoke.log (head 40) ---"; head -40 /tmp/chrome-smoke.log
-          pkill -f "remote-debugging-port=9224" || true
+          test_cdp () {
+            name="$1"; bin="$2"; shift 2
+            echo "=== [$name] $("$bin" --version 2>/dev/null || echo version-unknown) ==="
+            xvfb-run -a "$bin" "$@" --no-sandbox --disable-dev-shm-usage \
+              --remote-debugging-port=9224 --remote-allow-origins='*' \
+              --user-data-dir="/tmp/smoke-$name" about:blank > "/tmp/smoke-$name.log" 2>&1 &
+            ok=""
+            for i in $(seq 1 10); do
+              sleep 2
+              if curl -s http://127.0.0.1:9224/json/version >/dev/null; then ok="$((i*2))"; break; fi
+            done
+            if [ -n "$ok" ]; then
+              echo "[$name] CDP OK after ${ok}s: $(curl -s http://127.0.0.1:9224/json/version | head -c 200)"
+            else
+              echo "[$name] CDP FAILED (20s)"
+              grep -im3 "devtools" "/tmp/smoke-$name.log" || echo "[$name] no DevTools line in output"
+            fi
+            pkill -f "remote-debugging-port=9224" 2>/dev/null || true
+            sleep 1
+          }
+          test_cdp branded-headful "${{ steps.chrome.outputs.chrome-path }}" || true
+          test_cdp branded-headless "${{ steps.chrome.outputs.chrome-path }}" --headless=new || true
+          [ -x /usr/bin/google-chrome ] && { test_cdp system-headful /usr/bin/google-chrome || true; }
+          test_cdp chromium-headful "${{ steps.chromium.outputs.chrome-path }}" || true
 
       - name: Run daily charging schedule
         env:
