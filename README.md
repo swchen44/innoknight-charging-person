@@ -81,9 +81,9 @@ gh workflow run daily-schedule.yml -f apply=true
 
 ## 注意事項
 
-- **60 天規則**：公開 repo 的排程 workflow 在 60 天沒有任何 push/PR 活動後會被
-  GitHub 自動停用（排程執行本身不算活動）。GitHub 會先寄警告信，收到就到
-  Actions → daily-schedule 按「Enable」；平常任何一次 push 都會重置計時。
+- **60 天規則（已根治）**：公開 repo 的排程 workflow 在 60 天沒有 push/PR 活動後會被
+  GitHub 自動停用。本 repo 的 `keepalive.yml` 每月 1、15 號自動 push 一個時間戳
+  重置計時，正常情況不需人工介入（若 keepalive 故障，GitHub 停用前仍會寄警告信作為後備）。
 - **退出**：刪掉這個 repo 不會讓 InnoKnight 密碼失效；不再使用時，去 InnoKnight
   改密碼才是真正的退出。
 - 預設 dry-run、要旗標才寫入；跨午夜的充電時段（如 23:00–02:00）不支援。

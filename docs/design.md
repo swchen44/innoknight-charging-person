@@ -3,7 +3,12 @@
 > 本文件是 [innoknight-charging-scheduler](https://github.com/swchen44/innoknight-charging-scheduler) 研究文件
 > [`docs/research/cloud-architecture.md`](https://github.com/swchen44/innoknight-charging-scheduler/blob/main/docs/research/cloud-architecture.md)
 > 中「情境一：個人使用」的落地設計。研究文件已經過兩輪獨立架構評審，本設計直接採用評審修正後的結論，不再重新論證。
-> 實作步驟見 [plan.md](plan.md)。
+> 實作步驟見 [plan.md](plan.md)，驗證與除錯全紀錄見 [PDCA.md](PDCA.md)。
+
+> **目前運行狀態（2026-08-30）**：go/no-go 已 **GO**、每晚自動排程（Phase 4）已上線。
+> 進入**辨識期並行**——原自管主機不停（維持離峰 00:30–06:00），雲端版暫時改用
+> 早上 **07:00–10:00**（GitHub Variables 設定）以供人工核對；核對穩定後再改回離峰、
+> 讓自管主機退場。以下設計文中的 `00:30–06:00` 指最終目標時段；實際時段可由 Variables 覆寫。
 
 ## 1. 目標與範圍
 
@@ -144,8 +149,9 @@ flowchart TD
      免費取得 push protection（自動擋下不小心 commit 的密鑰）。
    - **代價 1——60 天無活動自動停用排程**：公開 repo 的 `schedule` workflow 在 60 天
      沒有 push/PR 活動後會被自動停用，且排程執行本身不算活動，這是無聲失效。
-     對策：GitHub 停用前會寄警告信，收到就去 Actions 頁按「Enable」；
-     平常任何一次 push（維護、更新文件）都會重置計時。README 已記載。
+     **對策已實作並驗證有效**：`keepalive.yml` 每月 1、15 號自動 push 一個時間戳 commit
+     重置計時（任何 commit 都會重置所有 scheduled workflow 的計時），根治此問題，
+     不需人工介入。GitHub 停用前的警告信作為 keepalive 若故障時的最後防線。
    - **代價 2——Actions log 全世界可讀**：因此「密碼不內嵌 JS」（第 5 條）在**第一次
      真實執行之前**就必須完成（已完成，不是之後才補），且裝置名稱放 Secrets（第 6 條）、
      log 不印 cookie/token 內容。
@@ -194,7 +200,7 @@ flowchart TD
 | Actions 執行紀錄保留 | 90 天 | 足夠人工回查 log |
 
 注意：公開 repo 換到不限分鐘數，但帶進「60 天無 push 活動自動停用排程」的無聲失效
-風險，對策見 §4 第 7 條。
+風險，已用 `keepalive.yml` 根治（對策見 §4 第 7 條）。
 
 ## 8. 監控
 

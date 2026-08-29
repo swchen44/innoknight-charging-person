@@ -11,11 +11,12 @@ innoknight_scheduler/
 ├── scheduler.py         # 純函式：payload 組裝、過期清理判斷、重複預約判斷
 ├── client.py            # InnoKnight HTTP API client（read_balance / schedule_set / …）
 ├── crypto.py            # InnoKnight 通訊協定的 AES 加密層（協定常數來自網站前端）
-├── browser_session.py   # Chrome（--headless=new）+ CDP 登入流程；正式無人值守入口
+├── browser_session.py   # headful Chrome + CDP 登入流程（含重試）；正式無人值守入口
 └── main.py              # direct API 登入入口（開發測試用，可能被 reCAPTCHA 擋）
 .github/workflows/
-├── daily-schedule.yml   # 每日充電預約（workflow_dispatch；Phase 4 後加 schedule cron）
-└── ci.yml               # push/PR 時跑 ruff + mypy + 單元測試
+├── daily-schedule.yml   # 每日充電預約（schedule cron 已啟用 + workflow_dispatch）
+├── ci.yml               # push/PR 時跑 ruff + mypy + 單元測試
+└── keepalive.yml        # 每月 2 次自動 push 時間戳，防公開 repo 60 天排程停用
 tests/
 ├── unittest/            # 純單元測試，不需要憑證，CI 自動跑
 └── integration/         # 需要真實 InnoKnight 帳號；預設 skip，見下方說明
@@ -25,11 +26,18 @@ tests/
 
 `browser_session.main()` 是正式入口：
 
-1. `login_with_browser()` 以 `--headless=new` 啟動 Chrome（Chrome 151+ 已移除有頭
-   模式的 CDP port，Xvfb 不再需要）、透過 CDP 開啟登入頁、`_fill_login_form()`
-   填表登入、輪詢 `document.cookie` 取得 `user` cookie。
-2. cookie 解析成 `InnoKnightSession`，掛到 `InnoKnightClient` 上。
-3. `run_daily_workflow()`（`automation.py`）執行純邏輯，透過 client 呼叫遠端 API。
+1. `login_with_browser()` 以 **headful** Chrome（`build_chrome_command` 自動帶
+   `--disable-gpu` + xvfb-run）啟動、`_fill_login_form()` 用 CDP `Input.insertText`
+   填入帳密（絕不進 JS 字串）並點擊登入。
+2. **直接從登入 API 回應取得 session**：`_session_from_login_response()` 解析
+   `get_end_user_token` 的回應 body 拿 `uuid`/`token`（不依賴前端寫 cookie 的時機；
+   保留讀 `user` cookie 作後備）。reCAPTCHA 對 GitHub datacenter IP 是**間歇性放行**，
+   被拒時重載頁面重試最多 `max_login_attempts`（預設 3）次。
+3. session 掛到 `InnoKnightClient`，`run_daily_workflow()`（`automation.py`）執行純邏輯，
+   透過 client 呼叫遠端 API。
+
+> 為何是 headful 而不是 headless、為何要 `--disable-gpu`、reCAPTCHA 的間歇性——
+> 完整的驗證與除錯證據鏈見 [PDCA.md](PDCA.md)（含兩個中途被實驗推翻的錯誤判斷）。
 
 `crypto.py` **不能刪**：`client.py` 的 `login()` / `set_schedule()` / `remove_schedule()`
 都依賴它把 payload 加密後才送出，不加密伺服器不收。它是 InnoKnight 網站自身協定的
@@ -95,10 +103,11 @@ INNOKNIGHT_USERNAME=... INNOKNIGHT_PASSWORD=... INNOKNIGHT_DEVICE_NAME=... \
 |---|---|
 | `workflow_dispatch`，不勾 apply | dry-run（只讀不寫） |
 | `workflow_dispatch`，勾 apply | 正式執行（`--execute`） |
-| `schedule`（Phase 4 後啟用） | 一律正式執行 |
+| `schedule`（**已啟用**） | 一律正式執行 |
 
 排程時間 `5 14 * * *`（UTC）= 台北 22:05（前一晚），程式內 `--target-offset-days`
-預設 1，所以建立的是**明天**的 00:30–06:00 預約。不要把 cron 改回午夜附近——
+預設 1，所以建立的是**明天**的預約。時段由 Variables 決定——**辨識期為 07:00–10:00**
+（與自管主機的 00:30–06:00 區分，見 [PDCA.md](PDCA.md)）。不要把 cron 改回午夜附近——
 設計理由（排程延遲）見 design.md §4 第 1 條。
 
 Exit code 約定（`browser_session.main()`）：
@@ -114,6 +123,12 @@ Exit code 約定（`browser_session.main()`）：
 push 到 main 與 PR 時跑 ruff + mypy + `tests/unittest`。整合測試刻意不在 CI 跑
 （需要憑證，且公開 repo 的 PR 不該碰 Secrets）。
 
+### `keepalive.yml`
+
+每月 1、15 號自動 push 一個時間戳 commit（`.github/last-activity.txt`），
+根治「公開 repo 60 天無活動 → 排程被無聲停用」。`permissions: contents: write`
+（本 repo 唯一需要寫入權限的 workflow）。commit 帶 `[skip ci]`。詳見下方「60 天規則」。
+
 ## Secrets 與 Variables
 
 | 名稱 | 類型 | 說明 |
@@ -121,8 +136,8 @@ push 到 main 與 PR 時跑 ruff + mypy + `tests/unittest`。整合測試刻意�
 | `INNOKNIGHT_USERNAME` | Secret | InnoKnight 帳號 |
 | `INNOKNIGHT_PASSWORD` | Secret | InnoKnight 密碼 |
 | `INNOKNIGHT_DEVICE_NAME` | **Secret**（不是 Variable） | 充電樁名稱是建案＋車位號碼（住處線索）；公開 repo 的 log 全世界可讀，放 Secret 才會自動遮罩 |
-| `INNOKNIGHT_START_TIME` | Variable（選填，預設 00:30） | 充電開始時間 |
-| `INNOKNIGHT_END_TIME` | Variable（選填，預設 06:00） | 充電結束時間 |
+| `INNOKNIGHT_START_TIME` | Variable（選填，code 預設 00:30） | 充電開始時間；**辨識期設 07:00** |
+| `INNOKNIGHT_END_TIME` | Variable（選填，code 預設 06:00） | 充電結束時間；**辨識期設 10:00** |
 
 設定方式（絕不寫進任何檔案）：
 
@@ -141,7 +156,8 @@ gh secret set INNOKNIGHT_DEVICE_NAME
 2. **錯誤訊息不回印請求參數**。`CdpClient.call()` 只帶 CDP 回傳的 error 物件，
    不把我們送出的 params（可能含密碼）放進例外訊息。
 3. **第三方 Action 一律釘完整 commit SHA**，不用 `@v1` 這種可變 tag；
-   `permissions:` 維持最小（`contents: read`）。升級 Action 時查新版 SHA 換上。
+   `permissions:` 維持最小——`daily-schedule`/`ci` 用 `contents: read`，只有
+   `keepalive` 需要 `contents: write`（自動 push 時間戳）。升級 Action 時查新版 SHA 換上。
 4. **不新增任何硬編碼個人資訊**（裝置名稱、住址線索、序號）。單元測試用
    `測試充電樁A-1` 這類通用值。
 
@@ -150,7 +166,9 @@ gh secret set INNOKNIGHT_DEVICE_NAME
 ### InnoKnight 改版登入頁（幾乎必然發生）
 
 症狀：workflow 紅燈，log 出現 `login_input_not_found` 或
-`Timed out waiting for InnoKnight browser login cookie`。
+`Login failed after N attempts`。逾時的錯誤訊息會附上頁面診斷（URL、標題、
+欄位值長度、captcha 偵測、登入 API 的 `success`/`message`——都不含憑證），據此判斷是
+選擇器失效還是 reCAPTCHA 連續被拒。
 
 修法：開真實網站看新的 DOM，更新 `browser_session.py` 的 `build_focus_script()` /
 `build_click_login_script()` 選擇器，跑單元測試確認憑證隔離規則沒破，
@@ -159,8 +177,10 @@ gh secret set INNOKNIGHT_DEVICE_NAME
 ### 排程停止執行（公開 repo 的 60 天規則）
 
 公開 repo 60 天沒有 push/PR 活動，GitHub 會自動停用 `schedule` workflow
-（排程執行本身**不算**活動）。GitHub 停用前會寄警告信；收到就到
-Actions → daily-schedule → Enable。平常任何一次 push 都會重置計時。
+（排程執行本身**不算**活動）。**本 repo 已用 `keepalive.yml` 根治**：每月 1、15 號
+自動 push 時間戳 commit 重置計時，正常情況不需人工介入。若 keepalive 本身故障
+（例如 `contents: write` 權限被 repo 設定收回），GitHub 停用前仍會寄警告信；
+收到就到 Actions → 對應 workflow → Enable，並修好 keepalive。
 
 ### 「綠燈但沒排到程」
 
