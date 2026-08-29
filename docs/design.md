@@ -173,15 +173,17 @@ flowchart TD
 
 ## 6. 風險與待驗證清單
 
-此清單同時是未來情境二（多租戶版）的可行性守門員：
+此清單同時是未來情境二（多租戶版）的可行性守門員。**驗證結果全程記錄於 [PDCA.md](PDCA.md)。**
 
-- [ ] **【go/no-go】GitHub Actions 共用 IP range 是否被 InnoKnight 風控／reCAPTCHA 擋下**。
-  被擋的話 `INNOKNIGHT_RECAPTCHA_TOKEN` 不是退路（人工取得、幾分鐘過期，無法無人值守），
-  整個免費架構要重新評估（如付費固定出口 IP）。**先用 `workflow_dispatch` 手動觸發 dry-run 實測。**
+- [x] **【go/no-go】GitHub Actions 共用 IP 是否被 InnoKnight 風控／reCAPTCHA 擋下** →
+  **GO**。關鍵是用 **headful**（真實指紋）：headless 被 reCAPTCHA 直接拒（`success:false`），
+  headful 則間歇性放行；程式在被拒時重載頁面重試最多 3 次。2026-08-30 dry-run 端到端跑通。
+- [x] 確認 Chrome 執行檔路徑並固定 → 由 workflow 的 `browser-actions/setup-chrome` 輸出帶入。
+- [x] 量測單次 job 總耗時 → **約 52 秒**（含一次重試；核心步驟 21 秒）。
+- [x] 驗證憑證不內嵌 JS 的改法不影響登入成功率 → 已用 `Input.insertText` 路徑實測登入成功。
+- [ ] **穩定性量測（新的头号待辦）**：連續多天 dry-run，統計平均重試次數與「3 次全被拒」的機率，
+  決定 `max_login_attempts` 是否要調整、以及這個免費方案的實際可靠度。
 - [ ] 實跑數天，量測排程觸發器的真實延遲分佈，確認前一晚 22:05 的餘裕足夠。
-- [ ] 確認 Chrome 執行檔實際路徑並固定。
-- [ ] 量測單次 job 總耗時（checkout + 依賴 + xvfb + 登入 + API），此數字決定情境二批次容量。
-- [ ] 驗證「密碼不內嵌 JS」改法與現有 `build_login_script()` 行為一致，不影響登入成功率。
 
 ## 7. 免費層數字
 

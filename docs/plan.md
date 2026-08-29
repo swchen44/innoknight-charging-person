@@ -68,9 +68,10 @@ Phase 4）與 `ci.yml`（uv + ruff + mypy + 單元測試）就緒；憑證改由
 3. 記錄 Chrome 實際執行檔路徑與單次 job 總耗時（寫回 design.md §6 清單）。
 4. 連續數天、不同時段各觸發一次，確認不是單次僥倖。
 
-**完成條件（go）**：連續多次 dry-run 登入成功、無風控攔截 → 進 Phase 3。
-**不通過（no-go）**：登入被擋 → **停止**，回設計文件重新評估（付費固定出口 IP／代理），
-不進入後續 Phase，也絕不進 Phase 5 分享。
+**結果（2026-08-30）：GO ✅**——dry-run 端到端跑通，完整證據與除錯過程見 [PDCA.md](PDCA.md)。
+關鍵發現：必須用 **headful**（headless 被 reCAPTCHA 擋、headful 間歇性放行），
+且 headful 在 runner 需 `--disable-gpu`；登入改為直接讀登入 API 回應、被拒時重載重試最多 3 次。
+剩餘待辦轉為「穩定性量測」（見下方風險備忘與 design.md §6）。
 
 ## Phase 3：安全強化 ✅（已提前至 Phase 1 完成——repo 公開，log 全世界可讀，必須先於任何真實執行）
 

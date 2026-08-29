@@ -91,6 +91,8 @@ uv run python -m innoknight_scheduler.browser_session --execute  # 正式
 
 - [docs/design.md](docs/design.md) — 設計：架構、流程、關鍵設計決策、安全、待驗證清單
 - [docs/plan.md](docs/plan.md) — 分階段實作計劃與目前進度
+- [docs/PDCA.md](docs/PDCA.md) — **雲端化的驗證與除錯全紀錄**：go/no-go 實測證據鏈、
+  reCAPTCHA 為何要用 headful、兩個中途被實驗推翻的錯誤判斷、網路查證來源
 - [docs/developer.md](docs/developer.md) — 開發者文件：模組結構、uv/ruff/mypy 工具鏈、
   測試、維護情境（InnoKnight 改版怎麼修等）
 - 上游研究：[cloud-architecture.md](https://github.com/swchen44/innoknight-charging-scheduler/blob/main/docs/research/cloud-architecture.md)
@@ -102,6 +104,6 @@ uv run python -m innoknight_scheduler.browser_session --execute  # 正式
 | 設計與計劃 | ✅ |
 | Phase 1 移植程式碼、workflow、測試 | ✅ |
 | 安全強化（憑證不進 JS、exit code、Action 釘 SHA）— 因 repo 公開而提前 | ✅ |
-| Phase 2 手動 dry-run 驗證 IP 風控（go/no-go） | ⬜ 待使用者設定 Secrets 後執行 |
-| Phase 4 啟用每日排程、舊系統退場 | ⬜ |
+| **Phase 2 dry-run 驗證 IP 風控（go/no-go）** | ✅ **GO——端到端跑通**（見 [PDCA.md](docs/PDCA.md)） |
+| Phase 4 啟用每日排程、舊系統退場 | ⬜ 待穩定性量測後進行 |
 | Phase 5 模板化分享（未來） | ⬜ |
