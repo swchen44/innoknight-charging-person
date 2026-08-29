@@ -157,6 +157,9 @@ class CdpClient:
         self.timeout = timeout
         self._next_id = 1
         self._ws: Any | None = None
+        # call() 等回應時順手收集的 CDP 事件（如 Network.responseReceived），
+        # 供登入失敗診斷回查 API 回應。
+        self._events: list[dict[str, Any]] = []
 
     @property
     def base_url(self) -> str:
@@ -223,6 +226,10 @@ class CdpClient:
                     raise RuntimeError(f"CDP {method} failed: {message['error']}")
                 result = message.get("result", {})
                 return result if isinstance(result, dict) else {}
+            if message.get("method"):
+                self._events.append(message)
+                if len(self._events) > 500:
+                    self._events.pop(0)
 
     def evaluate(self, expression: str) -> Any:
         result = self.call(
@@ -238,6 +245,30 @@ class CdpClient:
         """把文字送進目前 focus 的欄位（等同使用者輸入/貼上）。"""
 
         self.call("Input.insertText", {"text": text})
+
+    def find_response(self, url_substring: str) -> tuple[int | None, str | None]:
+        """從收集到的 Network 事件找出指定 API 的回應（status, body）。
+
+        僅供失敗診斷使用；呼叫端負責過濾 body 中的敏感欄位再輸出。
+        """
+
+        for event in reversed(self._events):
+            if event.get("method") != "Network.responseReceived":
+                continue
+            params = event.get("params", {})
+            response = params.get("response", {})
+            if url_substring not in str(response.get("url", "")):
+                continue
+            status = response.get("status")
+            body: str | None = None
+            try:
+                result = self.call("Network.getResponseBody", {"requestId": params.get("requestId")})
+                raw = result.get("body")
+                body = raw if isinstance(raw, str) else None
+            except RuntimeError:
+                body = None
+            return (status if isinstance(status, int) else None, body)
+        return (None, None)
 
     def close(self) -> None:
         if self._ws is not None:
@@ -323,12 +354,29 @@ PAGE_STATE_SCRIPT = """
 """.strip()
 
 
+# 登入 API 回應中可以安全印出的欄位——絕不印 token/uuid 等會話憑證。
+SAFE_LOGIN_RESPONSE_KEYS = ("success", "message", "msg", "error", "error_message", "code", "status")
+
+
+def _login_response_summary(cdp: CdpClient) -> str:
+    status, body = cdp.find_response("get_end_user_token")
+    if status is None:
+        return "login API response: not captured"
+    summary: Any
+    try:
+        data = json.loads(body or "")
+        summary = {key: data[key] for key in SAFE_LOGIN_RESPONSE_KEYS if key in data}
+    except (ValueError, TypeError):
+        summary = (body or "")[:200]
+    return f"login API response: http={status} {json.dumps(summary, ensure_ascii=False)}"
+
+
 def _page_state(cdp: CdpClient) -> str:
     """登入逾時的診斷：回傳頁面目前狀態（不含任何憑證內容）。"""
 
     try:
         state = cdp.evaluate(PAGE_STATE_SCRIPT)
-        return f"page state: {json.dumps(state, ensure_ascii=False)}"
+        return f"page state: {json.dumps(state, ensure_ascii=False)}\n{_login_response_summary(cdp)}"
     except Exception as exc:  # noqa: BLE001 - 診斷路徑，任何失敗都不該蓋掉原始錯誤
         return f"page state unavailable: {type(exc).__name__}"
 
