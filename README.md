@@ -1,19 +1,27 @@
 # innoknight-charging-person
 
 InnoKnight 個人版每日自動充電排程——每天由 **GitHub Actions**（免費）自動登入
-iot.innoknight.com，替你建立**隔天 00:30–06:00** 的離峰充電預約。
-不用自己顧主機，每月成本 NT$ 0。
+iot.innoknight.com，替你建立隔天的充電預約。不用自己顧主機，每月成本 NT$ 0。
 
 本專案是 [innoknight-charging-scheduler](https://github.com/swchen44/innoknight-charging-scheduler)
 的雲端化版本（該 repo 跑在自管主機的 crontab 上）。
+
+> **目前狀態：辨識期並行運行（2026-08-30 起）。** 原自管主機不停、繼續用
+> 00:30–06:00 離峰時段；雲端版（本 repo）刻意改用**早上 07:00–10:00** 這個明顯不同的
+> 時段，方便人工在 InnoKnight 上一眼分辨哪筆預約是雲端版建立的、確認雲端版運作正常。
+> 核對穩定後，再把雲端版改回離峰 00:30–06:00 並讓自管主機退場。時段由 GitHub Variables
+> 控制，改時段不需要動程式碼。
 
 ## 運作方式
 
 每天台北時間**前一晚 22:05**（UTC cron `5 14 * * *`）觸發：
 
-1. 用 Chrome（`--headless=new` + CDP）登入 InnoKnight 網站。
+1. 用 Chrome（**headful** + `--disable-gpu` + Xvfb + CDP）登入 InnoKnight——headful
+   真實指紋是通過網站 reCAPTCHA 的關鍵；被 reCAPTCHA 間歇性拒絕時會重載頁面重試最多 3 次
+   （完整驗證見 [docs/PDCA.md](docs/PDCA.md)）。
 2. 清理過期的一次性舊預約（保留最近一筆）。
-3. 若**明天**尚無 00:30–06:00 預約、且充電樁狀態為「充電樁已就緒」，就自動建立。
+3. 若**明天**尚無相同時段預約、且充電樁狀態為「充電樁已就緒」，就自動建立
+   （辨識期為 07:00–10:00；時段由 Variables 設定）。
 
 「前一晚觸發、目標日是明天」是刻意設計：GitHub 排程觸發器尖峰時段可能延遲
 15 分鐘到 2 小時以上，前移觸發時間讓延遲再大也不會做出「時段已過」的預約。
@@ -32,11 +40,12 @@ gh secret set INNOKNIGHT_PASSWORD     # InnoKnight 密碼
 gh secret set INNOKNIGHT_DEVICE_NAME  # 充電樁完整名稱（照網站上顯示的打）
 ```
 
-充電時段預設 00:30–06:00；要改的話設 Variables（非機密）：
+充電時段由 Variables（非機密）控制。**目前為辨識期，設為 07:00–10:00**（與自管主機的
+00:30–06:00 區分，見文首「目前狀態」）；核對雲端版穩定後改回 `00:30` / `06:00` 即可：
 
 ```bash
-gh variable set INNOKNIGHT_START_TIME --body "00:30"
-gh variable set INNOKNIGHT_END_TIME --body "06:00"
+gh variable set INNOKNIGHT_START_TIME --body "07:00"   # 辨識期；離峰改回 00:30
+gh variable set INNOKNIGHT_END_TIME --body "10:00"     # 辨識期；離峰改回 06:00
 ```
 
 **絕對不要**把帳密寫進任何檔案再 commit（`.env` 已被 `.gitignore` 排除，但紀律優先）。
@@ -55,11 +64,11 @@ gh workflow run daily-schedule.yml
 gh workflow run daily-schedule.yml -f apply=true
 ```
 
-### 3. 啟用每日排程
+### 3. 每日排程（已啟用）
 
-手動驗證通過後（見 [docs/plan.md](docs/plan.md) Phase 2→4），把
-`.github/workflows/daily-schedule.yml` 裡 `schedule:` 那三行註解解開、push 即可。
-排程觸發一律是正式執行。
+`daily-schedule.yml` 的 `schedule` cron **已於 Phase 4 啟用**，每天台北時間前一晚
+22:05 自動執行、建立隔日預約，排程觸發一律是正式寫入。要暫停就把 `schedule:` 兩行
+重新註解掉。
 
 ## 看執行結果
 
@@ -67,6 +76,8 @@ gh workflow run daily-schedule.yml -f apply=true
   這類正常跳過）；**紅燈會寄信通知你**，通常是登入失敗或設定錯誤（例如充電樁
   名稱打錯——`device_not_found` 刻意設計成紅燈，不會默默假裝成功）。
 - 綠燈不等於「有建立預約」，點進 log 看實際內容（會印「新增重點預約」或跳過原因）。
+- **辨識期人工核對**：雲端版建立的是 **07:00–10:00**、自管主機是 00:30–06:00，
+  在 InnoKnight 上看到 07:00–10:00 的預約就表示雲端版設定成功。
 
 ## 注意事項
 
@@ -105,5 +116,7 @@ uv run python -m innoknight_scheduler.browser_session --execute  # 正式
 | Phase 1 移植程式碼、workflow、測試 | ✅ |
 | 安全強化（憑證不進 JS、exit code、Action 釘 SHA）— 因 repo 公開而提前 | ✅ |
 | **Phase 2 dry-run 驗證 IP 風控（go/no-go）** | ✅ **GO——端到端跑通**（見 [PDCA.md](docs/PDCA.md)） |
-| Phase 4 啟用每日排程、舊系統退場 | ⬜ 待穩定性量測後進行 |
+| 真實寫入驗證（apply + 冪等回查） | ✅ 完成（見 [PDCA.md](docs/PDCA.md)） |
+| **Phase 4 啟用每晚自動排程** | ✅ 已啟用（辨識期 07:00–10:00、兩邊並行） |
+| Phase 4 後續：穩定性量測、改回離峰、舊系統退場 | ⬜ 進行中／待人工核對 |
 | Phase 5 模板化分享（未來） | ⬜ |
