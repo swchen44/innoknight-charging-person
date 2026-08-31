@@ -42,8 +42,11 @@ class BrowserLoginConfig:
     login_url: str = LOGIN_URL
     timeout_seconds: int = 90
     # 每次登入嘗試等回應的秒數，與最多嘗試次數（reCAPTCHA 間歇性 → 重載重試）。
+    # 上限設 5：2026-08-30 首夜自動執行曾連續 3 次全被拒導致失敗（見 PDCA.md），
+    # 機率上 5 次把成功率從 ~78% 拉到 ~95%+（單次 p≈0.4 估）。不再往上加是為了避免
+    # 過多連續失敗登入加重 InnoKnight 對此帳號/IP 的風控。
     attempt_timeout_seconds: int = 25
-    max_login_attempts: int = 3
+    max_login_attempts: int = 5
     chrome_path: str = DEFAULT_CHROME_PATH
     profile_dir: str = DEFAULT_PROFILE_DIR
     # 預設 headful（headless=False）：headful 的瀏覽器指紋比 headless 真實得多，
@@ -533,10 +536,16 @@ def login_with_browser(config: BrowserLoginConfig) -> InnoKnightSession:
                     print(f"login succeeded on attempt {attempt}/{config.max_login_attempts}")
                 return session
             if attempt < config.max_login_attempts:
-                print(f"login attempt {attempt}/{config.max_login_attempts} {verdict}; reloading and retrying")
+                # 遞增等待（5、7、9…秒）：給 reCAPTCHA 評分一點恢復時間，
+                # 也讓「快速連續登入」的機器人特徵不那麼明顯。
+                backoff = 3 + attempt * 2
+                print(
+                    f"login attempt {attempt}/{config.max_login_attempts} {verdict}; "
+                    f"reloading and retrying in {backoff}s"
+                )
                 cdp.clear_events()
                 cdp.navigate(config.login_url)
-                time.sleep(3)
+                time.sleep(backoff)
         raise RuntimeError(
             f"Login failed after {config.max_login_attempts} attempts "
             f"(last verdict: {verdict})\n{_page_state(cdp)}"
