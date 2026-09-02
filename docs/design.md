@@ -5,10 +5,10 @@
 > 中「情境一：個人使用」的落地設計。研究文件已經過兩輪獨立架構評審，本設計直接採用評審修正後的結論，不再重新論證。
 > 實作步驟見 [plan.md](plan.md)，驗證與除錯全紀錄見 [PDCA.md](PDCA.md)。
 
-> **目前運行狀態（2026-08-30）**：go/no-go 已 **GO**、每晚自動排程（Phase 4）已上線。
-> 進入**辨識期並行**——原自管主機不停（維持離峰 00:30–06:00），雲端版暫時改用
-> 早上 **07:00–10:00**（GitHub Variables 設定）以供人工核對；核對穩定後再改回離峰、
-> 讓自管主機退場。以下設計文中的 `00:30–06:00` 指最終目標時段；實際時段可由 Variables 覆寫。
+> **目前運行狀態（2026-09-03）**：go/no-go 已 **GO**、每晚自動排程（Phase 4）已上線。
+> 辨識期（雲端版暫用 07:00–10:00 供人工核對）已於 2026-09-03 結束，Variables 已改回
+> 真正的離峰 **00:30–06:00**；原自管主機**先不停**，繼續觀察雲端版穩定性後再讓其退場。
+> 觸發時間也已從 22:05 調整為 **20:30**（緩衝拉到 4 小時，見 §4 第 1 條與 [PDCA.md](PDCA.md)）。
 
 ## 1. 目標與範圍
 
@@ -23,7 +23,7 @@
 
 具體行為：
 
-- 每天**台北時間前一晚 22:05**（UTC cron `5 14 * * *`）觸發。
+- 每天**台北時間前一晚 20:30**（UTC cron `30 12 * * *`）觸發，與窗口開始時間保留 4 小時緩衝。
 - 清理過期的一次性舊預約（只保留最近一筆）。
 - 若**明天**（`target_date` = 隔天）已有 00:30–06:00 預約就結束；否則視裝置狀態決定是否新增。
 - 預設 dry-run，需要明確旗標（`--apply`）才會動遠端資料。
@@ -49,10 +49,10 @@
 
 ```mermaid
 flowchart LR
-    subgraph GH[GitHub 儲存庫（私有）]
-        SEC[Encrypted Secrets<br/>INNOKNIGHT_USERNAME / INNOKNIGHT_PASSWORD]
-        VAR[Actions Variables<br/>INNOKNIGHT_DEVICE_NAME / 時段設定]
-        WF["Actions workflow<br/>on.schedule cron: 5 14 * * *（UTC，＝台北前一日 22:05）"]
+    subgraph GH[GitHub 儲存庫（公開，見 §4 第 7 條）]
+        SEC[Encrypted Secrets<br/>USERNAME / PASSWORD / DEVICE_NAME]
+        VAR[Actions Variables<br/>充電時段設定（非機密）]
+        WF["Actions workflow<br/>on.schedule cron: 30 12 * * *（UTC，＝台北前一日 20:30）"]
     end
     RUNNER[Ubuntu Runner 一次性 VM<br/>apt install xvfb<br/>google-chrome + xvfb-run + CDP]
     IK[InnoKnight 網站<br/>iot.innoknight.com]
@@ -74,7 +74,7 @@ sequenceDiagram
     participant XC as Xvfb + Chromium
     participant IK as InnoKnight API
 
-    CR->>JOB: cron 觸發（台北前一日 22:05）
+    CR->>JOB: cron 觸發（台北前一日 20:30）
     JOB->>JOB: checkout + 安裝 Python 依賴
     JOB->>XC: xvfb-run google-chrome --remote-debugging-port
     XC->>IK: 開啟登入頁並自動填表（不把密碼字面內嵌進 JS 字串）
@@ -118,13 +118,20 @@ flowchart TD
 
 每一條都對應研究文件評審後的結論：
 
-1. **觸發時間前移到前一晚，`target_date` 永遠是明天**。GitHub 排程觸發器在尖峰 UTC 時段有
-   15 分鐘到 2 小時以上的延遲案例（GitHub Community #191400）。原「00:05 觸發、00:30 開始」
-   只有 25 分鐘餘裕，延遲一超過就會建立一個開始時間已過的當日預約——這正是原專案本機 cron
-   時區錯亂時真實發生過的 bug，只是成因換人。改成台北 22:05 觸發、目標日設隔天，
-   就算延遲兩小時也在午夜前完成，不需要額外補救邏輯。
-2. **UTC cron 是唯一事實來源**。台北是 UTC+8、全年無日光節約時間，`5 14 * * *`（UTC）
-   恆等於台北 22:05，這是恆定的數學事實。`on.schedule.timezone` 欄位（GitHub 2026/3 新功能）
+1. **觸發時間前移到前一晚，`target_date` 永遠是明天，緩衝拉到 4 小時**。GitHub 排程
+   觸發器在尖峰 UTC 時段有延遲案例；原「00:05 觸發、00:30 開始」只有 25 分鐘餘裕——這正是
+   原專案本機 cron 時區錯亂時真實發生過的 bug，只是成因換人。改成前一晚觸發、目標日設隔天，
+   結構性避開了「開始時間已過」的問題。**觸發時間本身經過兩次調整**：文件研究階段參考
+   GitHub Community #191400 引用的「15 分鐘至 2 小時」案例，選了 22:05（2h25m 緩衝）；
+   但 2026-08-30 起實際上線量測，真實延遲落在 **3.5–5.8 小時**，明顯超過原引用案例，
+   2026-09-03 改為 **20:30 觸發**（UTC `30 12 * * *`），把緩衝拉高到 **4 小時**。
+   即使延遲把實際執行時間推過午夜，也不會建立錯日期的預約——`target_date` 是每次執行當下
+   重新用 Taipei 實際時間算出的「明天」，不是靜態算好綁在 cron 上的值（自我修正機制，
+   細節與延遲實測數據見 [PDCA.md](PDCA.md)）。移動觸發時間到更早也有代價：越早，車輛
+   在觸發當下還沒回家插上充電的機率越高，可能造成 `device_not_ready` 誤判跳過——20:30
+   是「緩衝要求」與「車輛通常已到家」之間權衡後的選擇，不是越早越好。
+2. **UTC cron 是唯一事實來源**。台北是 UTC+8、全年無日光節約時間，UTC cron 恆等於固定的
+   台北時間，這是恆定的數學事實。`on.schedule.timezone` 欄位（GitHub 2026/3 新功能）
    只能當提高可讀性的輔助，且要實測過才加，不預設依賴。
 3. **瀏覽器用 `browser-actions/setup-chrome`（Chrome for Testing）**。
    Ubuntu 的 `chromium-browser` apt 套件是 snap wrapper，runner 沒有可用的 snapd，根本裝不起來。

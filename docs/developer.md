@@ -105,15 +105,17 @@ INNOKNIGHT_USERNAME=... INNOKNIGHT_PASSWORD=... INNOKNIGHT_DEVICE_NAME=... \
 | `workflow_dispatch`，勾 apply | 正式執行（`--execute`） |
 | `schedule`（**已啟用**） | 一律正式執行 |
 
-排程時間 `5 14 * * *`（UTC）= 台北 22:05（前一晚），程式內 `--target-offset-days`
-預設 1，所以建立的是**明天**的預約。時段由 Variables 決定——**辨識期為 07:00–10:00**
-（與自管主機的 00:30–06:00 區分，見 [PDCA.md](PDCA.md)）。不要把 cron 改回午夜附近——
-設計理由（排程延遲）見 design.md §4 第 1 條。
+排程時間 `30 12 * * *`（UTC）= 台北 20:30（前一晚），與 00:30 窗口保留 4 小時緩衝
+（2026-09-03 從 22:05 調整，因實測延遲達 3.5–5.8 小時，見 PDCA.md）。程式內
+`--target-offset-days` 預設 1，所以建立的是**明天**的預約。時段由 Variables 決定，
+目前為真正離峰的 **00:30–06:00**（辨識期已於 2026-09-03 結束）。不要把 cron 改回
+午夜附近——設計理由（排程延遲）見 design.md §4 第 1 條。
 
-`workflow_dispatch` 額外提供 `target_offset_days` / `start_time` / `end_time` 三個補洞
-參數（留空 = 落回預設/Variables）。實作用 `inputs.x || vars.X || 預設` 的 fallback 鏈；
-`inputs.*` 在 `schedule` 觸發下是 `null`（GitHub 官方行為，非本專案臆測），`||` 安全
-落空不影響每晚自動排程。用途見 README「補洞」段落，驗證見 PDCA.md。
+`workflow_dispatch` 額外提供 `target_offset_days` / `start_time` / `end_time` 三個
+一般用途的覆寫參數（留空 = 落回預設/Variables），不限於補洞——例如臨時測試不同
+時段。實作用 `inputs.x || vars.X || 預設` 的 fallback 鏈；`inputs.*` 在 `schedule`
+觸發下是 `null`（GitHub 官方行為，非本專案臆測），`||` 安全落空不影響每晚自動排程。
+用途見 README「補洞」段落，驗證見 PDCA.md。
 
 Exit code 約定（`browser_session.main()`）：
 
@@ -141,8 +143,8 @@ push 到 main 與 PR 時跑 ruff + mypy + `tests/unittest`。整合測試刻意�
 | `INNOKNIGHT_USERNAME` | Secret | InnoKnight 帳號 |
 | `INNOKNIGHT_PASSWORD` | Secret | InnoKnight 密碼 |
 | `INNOKNIGHT_DEVICE_NAME` | **Secret**（不是 Variable） | 充電樁名稱是建案＋車位號碼（住處線索）；公開 repo 的 log 全世界可讀，放 Secret 才會自動遮罩 |
-| `INNOKNIGHT_START_TIME` | Variable（選填，code 預設 00:30） | 充電開始時間；**辨識期設 07:00** |
-| `INNOKNIGHT_END_TIME` | Variable（選填，code 預設 06:00） | 充電結束時間；**辨識期設 10:00** |
+| `INNOKNIGHT_START_TIME` | Variable（選填，預設 00:30） | 充電開始時間；目前設 **00:30**（離峰，辨識期已結束） |
+| `INNOKNIGHT_END_TIME` | Variable（選填，預設 06:00） | 充電結束時間；目前設 **06:00**（離峰，辨識期已結束） |
 
 設定方式（絕不寫進任何檔案）：
 
