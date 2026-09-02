@@ -105,11 +105,18 @@ INNOKNIGHT_USERNAME=... INNOKNIGHT_PASSWORD=... INNOKNIGHT_DEVICE_NAME=... \
 | `workflow_dispatch`，勾 apply | 正式執行（`--execute`） |
 | `schedule`（**已啟用**） | 一律正式執行 |
 
-排程時間 `30 12 * * *`（UTC）= 台北 20:30（前一晚），與 00:30 窗口保留 4 小時緩衝
-（2026-09-03 從 22:05 調整，因實測延遲達 3.5–5.8 小時，見 PDCA.md）。程式內
-`--target-offset-days` 預設 1，所以建立的是**明天**的預約。時段由 Variables 決定，
-目前為真正離峰的 **00:30–06:00**（辨識期已於 2026-09-03 結束）。不要把 cron 改回
-午夜附近——設計理由（排程延遲）見 design.md §4 第 1 條。
+**兩輪排程**（2026-09-03 起，原自管主機停用後無後備，見 PDCA.md）：
+第一輪 `30 12 * * *`（UTC）= 台北 20:30，與 00:30 窗口保留 4 小時緩衝
+（從 22:05 調整，因實測延遲達 3.5–5.8 小時）；第二輪 `0 13 * * *`（UTC）=
+台北 21:00，第一輪 30 分鐘後，給 reCAPTCHA／裝置就緒狀態多一次機會。
+兩輪共用 `concurrency: { group: daily-schedule, cancel-in-progress: false,
+queue: max }`——**`queue: max` 是必要的**，預設 `queue: single` 會讓還在排隊
+中的第一輪被第二輪的觸發直接取消（已實測驗證，見 PDCA.md），失去備援意義。
+第二輪不需要新邏輯，`has_equivalent_schedule` 的冪等檢查會讓它在第一輪已成功
+時直接判定「已存在」並跳過。程式內 `--target-offset-days` 預設 1，所以建立的
+是**明天**的預約。時段由 Variables 決定，目前為真正離峰的 **00:30–06:00**
+（辨識期已於 2026-09-03 結束）。不要把 cron 改回午夜附近——設計理由（排程延遲）
+見 design.md §4 第 1 條。
 
 `workflow_dispatch` 額外提供 `target_offset_days` / `start_time` / `end_time` 三個
 一般用途的覆寫參數（留空 = 落回預設/Variables），不限於補洞——例如臨時測試不同
