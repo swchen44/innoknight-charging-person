@@ -110,6 +110,11 @@ INNOKNIGHT_USERNAME=... INNOKNIGHT_PASSWORD=... INNOKNIGHT_DEVICE_NAME=... \
 （與自管主機的 00:30–06:00 區分，見 [PDCA.md](PDCA.md)）。不要把 cron 改回午夜附近——
 設計理由（排程延遲）見 design.md §4 第 1 條。
 
+`workflow_dispatch` 額外提供 `target_offset_days` / `start_time` / `end_time` 三個補洞
+參數（留空 = 落回預設/Variables）。實作用 `inputs.x || vars.X || 預設` 的 fallback 鏈；
+`inputs.*` 在 `schedule` 觸發下是 `null`（GitHub 官方行為，非本專案臆測），`||` 安全
+落空不影響每晚自動排程。用途見 README「補洞」段落，驗證見 PDCA.md。
+
 Exit code 約定（`browser_session.main()`）：
 
 | 情況 | exit code | Actions 顯示 |

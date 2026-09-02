@@ -70,6 +70,19 @@ gh workflow run daily-schedule.yml -f apply=true
 22:05 自動執行、建立隔日預約，排程觸發一律是正式寫入。要暫停就把 `schedule:` 兩行
 重新註解掉。
 
+### 補洞：手動指定日期或時段
+
+若某天自動排程失敗漏建（例如 reCAPTCHA 連續被拒），可用 `workflow_dispatch` 的
+額外參數手動補建，不需等下一輪自動排程：
+
+```bash
+# 補「今天」的預約（預設是明天），並可臨時指定不同時段
+gh workflow run daily-schedule.yml -f apply=true -f target_offset_days=0 \
+  -f start_time=09:00 -f end_time=11:00
+```
+
+三個參數都留空時分別落回預設（明天／Variables 設定的時段），不影響每晚的自動排程。
+
 ## 看執行結果
 
 - **Actions 頁**：每天一筆 run。綠燈＝流程正常結束（包含「充電中、今天不用做事」
