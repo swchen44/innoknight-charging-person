@@ -7,12 +7,14 @@
 
 > **目前運行狀態（2026-09-03）**：go/no-go 已 **GO**、每晚自動排程（Phase 4）已上線，
 > **原自管主機已停用，雲端版是唯一運作中的系統**。辨識期（雲端版暫用 07:00–10:00
-> 供人工核對）已結束，Variables 已改回真正的離峰 **00:30–06:00**；觸發時間也已從
-> 22:05 調整為 **20:30**（緩衝拉到 4 小時，見 §4 第 1 條與 [PDCA.md](PDCA.md)）。
-> 因為沒有後備系統，同日再加了**第二輪排程備援**（21:00，30 分鐘後；`concurrency.
+> 供人工核對）已結束，Variables 與 code 內建預設已改回真正的離峰 **00:20–06:00**
+> （同日從 00:30 微調）；觸發時間也已從 22:05 調整為 20:30，同日再提早到
+> **15:30**（緩衝拉到約 8h50m，見 §4 第 1 條與 [PDCA.md](PDCA.md)）。因為沒有
+> 後備系統，同日再加了**第二輪排程備援**（16:00，30 分鐘後；`concurrency.
 > queue: max` 確保兩輪依序執行不互相取消，見 §4 第 6 條）。新的雙輪自動排程組合
-> 尚未經過真正的 `schedule` 事件驗證（此前只驗證過手動 dispatch），近期需要更
-> 頻繁的人工巡查，見 §8「監控」。
+> 尚未經過真正的 `schedule` 事件驗證（此前只驗證過手動 dispatch），且觸發時間
+> 提早到下午帶來新的裝置就緒風險（見 §4 第 1 條），近期需要更頻繁的人工巡查，
+> 見 §8「監控」。
 
 ## 1. 目標與範圍
 
@@ -27,9 +29,11 @@
 
 具體行為：
 
-- 每天**台北時間前一晚 20:30**（UTC cron `30 12 * * *`）觸發，與窗口開始時間保留 4 小時緩衝。
+- 每天**台北時間前一天下午 15:30 與 16:00 各觸發一輪**（UTC cron `30 7 * * *` /
+  `0 8 * * *`），與窗口開始時間保留約 8h50m／8h20m 緩衝；第二輪是無後備系統後
+  加的備援。
 - 清理過期的一次性舊預約（只保留最近一筆）。
-- 若**明天**（`target_date` = 隔天）已有 00:30–06:00 預約就結束；否則視裝置狀態決定是否新增。
+- 若**明天**（`target_date` = 隔天）已有 00:20–06:00 預約就結束；否則視裝置狀態決定是否新增。
 - 預設 dry-run，需要明確旗標（`--apply`）才會動遠端資料。
 
 ### 範圍外（本專案第一版不做）
@@ -56,7 +60,7 @@ flowchart LR
     subgraph GH[GitHub 儲存庫（公開，見 §4 第 7 條）]
         SEC[Encrypted Secrets<br/>USERNAME / PASSWORD / DEVICE_NAME]
         VAR[Actions Variables<br/>充電時段設定（非機密）]
-        WF["Actions workflow<br/>on.schedule cron: 30 12 * * *（UTC，＝台北前一日 20:30）"]
+        WF["Actions workflow<br/>on.schedule cron: 30 7,0 8 * * *（UTC，＝台北前一日 15:30/16:00 兩輪）"]
     end
     RUNNER[Ubuntu Runner 一次性 VM<br/>apt install xvfb<br/>google-chrome + xvfb-run + CDP]
     IK[InnoKnight 網站<br/>iot.innoknight.com]
@@ -78,7 +82,7 @@ sequenceDiagram
     participant XC as Xvfb + Chromium
     participant IK as InnoKnight API
 
-    CR->>JOB: cron 觸發（台北前一日 20:30）
+    CR->>JOB: cron 觸發（台北前一日 15:30，第二輪 16:00 同流程）
     JOB->>JOB: checkout + 安裝 Python 依賴
     JOB->>XC: xvfb-run google-chrome --remote-debugging-port
     XC->>IK: 開啟登入頁並自動填表（不把密碼字面內嵌進 JS 字串）
@@ -90,12 +94,12 @@ sequenceDiagram
         JOB->>IK: schedule_remove(id)
     end
     JOB->>JOB: has_equivalent_schedule(target_date=明天) 檢查是否已存在
-    alt 明天已有 00:30–06:00
+    alt 明天已有 00:20–06:00
         JOB->>JOB: 寫 log 並結束
     else 尚未建立
         JOB->>IK: get_devices / 必要時 get_latest_charging_record
         alt 狀態 = 充電樁已就緒
-            JOB->>IK: schedule_set(date=明天, 00:30–06:00)
+            JOB->>IK: schedule_set(date=明天, 00:20–06:00)
         else 其他狀態
             JOB->>JOB: 跳過，只寫 log（正常的「今天不用做事」）
         end
@@ -111,7 +115,7 @@ flowchart TD
     A[取得 read_balance 既有排程] --> B{"cleanup_candidates<br/>過期一次性預約數量 > 1？"}
     B -- 是 --> C[schedule_remove 除最近一筆外全部]
     B -- 否 --> D
-    C --> D{has_equivalent_schedule<br/>目標日已有 00:30–06:00？}
+    C --> D{has_equivalent_schedule<br/>目標日已有 00:20–06:00？}
     D -- 是 --> E[記錄「已存在相同預約」並結束]
     D -- 否 --> F{裝置狀態}
     F -- 充電樁已就緒 --> G[schedule_set 新增預約]
@@ -122,18 +126,22 @@ flowchart TD
 
 每一條都對應研究文件評審後的結論：
 
-1. **觸發時間前移到前一晚，`target_date` 永遠是明天，緩衝拉到 4 小時**。GitHub 排程
+1. **觸發時間前移到前一天，`target_date` 永遠是明天，且分兩輪**。GitHub 排程
    觸發器在尖峰 UTC 時段有延遲案例；原「00:05 觸發、00:30 開始」只有 25 分鐘餘裕——這正是
-   原專案本機 cron 時區錯亂時真實發生過的 bug，只是成因換人。改成前一晚觸發、目標日設隔天，
-   結構性避開了「開始時間已過」的問題。**觸發時間本身經過兩次調整**：文件研究階段參考
+   原專案本機 cron 時區錯亂時真實發生過的 bug，只是成因換人。改成前一天觸發、目標日設隔天，
+   結構性避開了「開始時間已過」的問題。**觸發時間經過三次調整**：文件研究階段參考
    GitHub Community #191400 引用的「15 分鐘至 2 小時」案例，選了 22:05（2h25m 緩衝）；
-   但 2026-08-30 起實際上線量測，真實延遲落在 **3.5–5.8 小時**，明顯超過原引用案例，
-   2026-09-03 改為 **20:30 觸發**（UTC `30 12 * * *`），把緩衝拉高到 **4 小時**。
-   即使延遲把實際執行時間推過午夜，也不會建立錯日期的預約——`target_date` 是每次執行當下
-   重新用 Taipei 實際時間算出的「明天」，不是靜態算好綁在 cron 上的值（自我修正機制，
-   細節與延遲實測數據見 [PDCA.md](PDCA.md)）。移動觸發時間到更早也有代價：越早，車輛
-   在觸發當下還沒回家插上充電的機率越高，可能造成 `device_not_ready` 誤判跳過——20:30
-   是「緩衝要求」與「車輛通常已到家」之間權衡後的選擇，不是越早越好。
+   2026-08-30 起實際上線量測，真實延遲落在 **3.5–5.8 小時**，明顯超過原引用案例，
+   2026-09-03 先改為 20:30（緩衝拉到 4 小時），同日**再提早到 15:30**（UTC `30 7 * * *`，
+   緩衝約 8h50m）——原因是原自管主機已停用、雲端版無後備，同時加了第二輪備援
+   （16:00，見第 11 條），若兩輪的緩衝都只有 4 小時，兩輪很可能被同一波排程延遲一起
+   壓縮到窗口邊緣，第二輪就失去「真正的恢復機會」這個意義；提早 5 小時讓兩輪即使都遇上
+   延遲上限，也還留有充分餘裕。即使延遲把實際執行時間推過午夜，也不會建立錯日期的預約——
+   `target_date` 是每次執行當下重新用 Taipei 實際時間算出的「明天」，不是靜態算好綁在
+   cron 上的值（自我修正機制，細節與延遲實測數據見 [PDCA.md](PDCA.md)）。移動觸發時間
+   到更早也有代價：越早，車輛在觸發當下還沒回家插上充電的機率越高，可能造成
+   `device_not_ready` 誤判跳過——15:30 是台北時間下午，比先前任何一次調整都更早，
+   若近期常撞到這個情況，代表觸發時間比實際回家時間早太多，需要重新評估往後調整。
 2. **UTC cron 是唯一事實來源**。台北是 UTC+8、全年無日光節約時間，UTC cron 恆等於固定的
    台北時間，這是恆定的數學事實。`on.schedule.timezone` 欄位（GitHub 2026/3 新功能）
    只能當提高可讀性的輔助，且要實測過才加，不預設依賴。
@@ -176,7 +184,7 @@ flowchart TD
    讓 GitHub 內建的「workflow 失敗寄信」變成免架設的告警管道。
 10. **殘留行程問題結構性消失**：GitHub Actions 每次都是全新一次性 VM，跑完即銷毀，
     原專案 commit `64f6410` 修過的 Xvfb 洩漏這類長駐主機問題不會存在。
-11. **第二輪排程備援（21:00，第一輪 30 分鐘後）+ `concurrency.queue: max`**——
+11. **第二輪排程備援（16:00，第一輪 30 分鐘後）+ `concurrency.queue: max`**——
     原自管主機停用（2026-09-03）後雲端版無後備，加第二輪給 reCAPTCHA／裝置就緒
     狀態多一次機會。`queue: max` 是必要條件：`concurrency.cancel-in-progress: false`
     只保護「已在跑」的 job，預設 `queue: single` 下若第一輪還在排隊（尚未真正開始

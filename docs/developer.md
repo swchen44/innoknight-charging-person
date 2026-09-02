@@ -106,17 +106,19 @@ INNOKNIGHT_USERNAME=... INNOKNIGHT_PASSWORD=... INNOKNIGHT_DEVICE_NAME=... \
 | `schedule`（**已啟用**） | 一律正式執行 |
 
 **兩輪排程**（2026-09-03 起，原自管主機停用後無後備，見 PDCA.md）：
-第一輪 `30 12 * * *`（UTC）= 台北 20:30，與 00:30 窗口保留 4 小時緩衝
-（從 22:05 調整，因實測延遲達 3.5–5.8 小時）；第二輪 `0 13 * * *`（UTC）=
-台北 21:00，第一輪 30 分鐘後，給 reCAPTCHA／裝置就緒狀態多一次機會。
+第一輪 `30 7 * * *`（UTC）= 台北 15:30，與 00:20 窗口保留約 8h50m 緩衝
+（22:05→20:30→15:30 三次調整，因實測延遲達 3.5–5.8 小時，且要讓第二輪即使
+遇上同樣延遲也仍有恢復空間，不被壓縮到窗口邊緣）；第二輪 `0 8 * * *`（UTC）=
+台北 16:00，第一輪 30 分鐘後，給 reCAPTCHA／裝置就緒狀態多一次機會。
 兩輪共用 `concurrency: { group: daily-schedule, cancel-in-progress: false,
 queue: max }`——**`queue: max` 是必要的**，預設 `queue: single` 會讓還在排隊
 中的第一輪被第二輪的觸發直接取消（已實測驗證，見 PDCA.md），失去備援意義。
 第二輪不需要新邏輯，`has_equivalent_schedule` 的冪等檢查會讓它在第一輪已成功
 時直接判定「已存在」並跳過。程式內 `--target-offset-days` 預設 1，所以建立的
-是**明天**的預約。時段由 Variables 決定，目前為真正離峰的 **00:30–06:00**
-（辨識期已於 2026-09-03 結束）。不要把 cron 改回午夜附近——設計理由（排程延遲）
-見 design.md §4 第 1 條。
+是**明天**的預約。時段的 code 內建預設與 Variables 目前都是真正離峰的
+**00:20–06:00**（辨識期已於 2026-09-03 結束，同日從 00:30 微調到 00:20）。
+不要把 cron 改回午夜附近——設計理由（排程延遲）見 design.md §4 第 1 條。
+觸發時間提早到下午也有裝置就緒的風險，見同一條的權衡說明。
 
 `workflow_dispatch` 額外提供 `target_offset_days` / `start_time` / `end_time` 三個
 一般用途的覆寫參數（留空 = 落回預設/Variables），不限於補洞——例如臨時測試不同
@@ -150,7 +152,7 @@ push 到 main 與 PR 時跑 ruff + mypy + `tests/unittest`。整合測試刻意�
 | `INNOKNIGHT_USERNAME` | Secret | InnoKnight 帳號 |
 | `INNOKNIGHT_PASSWORD` | Secret | InnoKnight 密碼 |
 | `INNOKNIGHT_DEVICE_NAME` | **Secret**（不是 Variable） | 充電樁名稱是建案＋車位號碼（住處線索）；公開 repo 的 log 全世界可讀，放 Secret 才會自動遮罩 |
-| `INNOKNIGHT_START_TIME` | Variable（選填，預設 00:30） | 充電開始時間；目前設 **00:30**（離峰，辨識期已結束） |
+| `INNOKNIGHT_START_TIME` | Variable（選填，code 預設 00:20） | 充電開始時間；目前設 **00:20**（離峰，辨識期已結束） |
 | `INNOKNIGHT_END_TIME` | Variable（選填，預設 06:00） | 充電結束時間；目前設 **06:00**（離峰，辨識期已結束） |
 
 設定方式（絕不寫進任何檔案）：
