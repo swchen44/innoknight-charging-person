@@ -23,7 +23,7 @@ def test_build_schedule_payload_defaults_to_midnight_window() -> None:
     assert payload == {
         "weekly": False,
         "date": "2026-05-24",
-        "start_time": "00:30",
+        "start_time": "00:20",
         "end_time": "06:00",
         "enable": True,
     }
@@ -61,21 +61,21 @@ def test_cleanup_candidates_never_removes_todays_or_future_schedules() -> None:
 
 def test_has_equivalent_schedule_treats_hh_mm_and_hh_mm_ss_as_same_window() -> None:
     schedules: list[dict[str, Any]] = [
-        {"id": 3694, "date": "2026-05-24", "weekly": 0, "start_time": "00:30:00", "end_time": "06:00:00"}
+        {"id": 3694, "date": "2026-05-24", "weekly": 0, "start_time": "00:20:00", "end_time": "06:00:00"}
     ]
 
     assert has_equivalent_schedule(
         schedules,
         target_date=date(2026, 5, 24),
-        start_time="00:30",
+        start_time="00:20",
         end_time="06:00",
     )
 
 
 def test_has_equivalent_schedule_distinguishes_target_dates() -> None:
-    # 前一晚 22:05 檢查「明天」時，今天既有的預約不能被誤認為明天已有預約。
+    # 前一晚觸發檢查「明天」時，今天既有的預約不能被誤認為明天已有預約。
     schedules: list[dict[str, Any]] = [
-        {"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:30", "end_time": "06:00"}
+        {"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:20", "end_time": "06:00"}
     ]
 
     assert not has_equivalent_schedule(schedules, target_date=date(2026, 5, 24))

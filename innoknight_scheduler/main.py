@@ -28,7 +28,7 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true", help="Perform remote mutations. Default is dry-run.")
     parser.add_argument("--recaptcha-token", default=os.getenv("INNOKNIGHT_RECAPTCHA_TOKEN"))
     parser.add_argument("--device-name", default=os.getenv("INNOKNIGHT_DEVICE_NAME"))
-    parser.add_argument("--start-time", default=os.getenv("INNOKNIGHT_START_TIME", "00:30"))
+    parser.add_argument("--start-time", default=os.getenv("INNOKNIGHT_START_TIME", "00:20"))
     parser.add_argument("--end-time", default=os.getenv("INNOKNIGHT_END_TIME", "06:00"))
     parser.add_argument(
         "--target-offset-days",

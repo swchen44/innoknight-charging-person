@@ -23,7 +23,7 @@ def test_innoknight_client_sets_schedule_by_encrypted_device_id_when_available()
 
     client.set_schedule(
         device={"name": DEVICE_NAME, "device_id": 1124},
-        schedule_payload={"weekly": False, "date": "2026-05-24", "start_time": "00:30", "end_time": "06:00"},
+        schedule_payload={"weekly": False, "date": "2026-05-24", "start_time": "00:20", "end_time": "06:00"},
     )
 
     assert captured["endpoint"] == "schedule_set"
@@ -76,7 +76,7 @@ def test_daily_workflow_falls_back_to_device_id_from_existing_schedules() -> Non
     assert result.created is True
     assert client.created[0][0]["device_id"] == 1124
     assert client.created[0][0]["device_uid"] == 448
-    assert client.created[0][1]["start_time"] == "00:30"
+    assert client.created[0][1]["start_time"] == "00:20"
 
 
 class ScheduleFallbackWithoutNestedDeviceIdClient(ScheduleFallbackClient):

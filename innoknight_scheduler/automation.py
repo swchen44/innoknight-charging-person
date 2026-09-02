@@ -16,7 +16,7 @@ class AutomationConfig:
     """
 
     device_name: str
-    start_time: str = "00:30"
+    start_time: str = "00:20"
     end_time: str = "06:00"
     ready_status: str = "充電樁已就緒"
 

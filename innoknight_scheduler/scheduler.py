@@ -7,7 +7,7 @@ from typing import Any
 def build_schedule_payload(
     *,
     target_date: date,
-    start_time: str = "00:30",
+    start_time: str = "00:20",
     end_time: str = "06:00",
     weekly: bool = False,
 ) -> dict[str, Any]:
@@ -80,7 +80,7 @@ def has_equivalent_schedule(
     schedules: list[dict[str, Any]],
     *,
     target_date: date,
-    start_time: str = "00:30",
+    start_time: str = "00:20",
     end_time: str = "06:00",
 ) -> bool:
     """判斷今天是否已存在相同日期與時間的充電預約。"""

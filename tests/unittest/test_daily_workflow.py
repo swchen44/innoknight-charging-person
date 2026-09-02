@@ -48,7 +48,7 @@ class DailyWorkflowTest(unittest.TestCase):
     def config(self) -> AutomationConfig:
         return AutomationConfig(
             device_name=DEVICE_NAME,
-            start_time="00:30",
+            start_time="00:20",
             end_time="06:00",
             ready_status="充電樁已就緒",
         )
@@ -74,7 +74,7 @@ class DailyWorkflowTest(unittest.TestCase):
 
     def test_exits_without_creating_when_target_schedule_already_exists(self) -> None:
         client = FakeClient(
-            schedules=[{"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:30", "end_time": "06:00"}],
+            schedules=[{"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:20", "end_time": "06:00"}],
             devices=[{"name": DEVICE_NAME, "sn": "XP000000000000"}],
             status="充電樁已就緒",
         )
@@ -88,7 +88,7 @@ class DailyWorkflowTest(unittest.TestCase):
         # 雲端版核心行為：前一晚（today）觸發，target_date = 明天。
         # 今天既有的預約不能擋下明天的建立。
         client = FakeClient(
-            schedules=[{"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:30", "end_time": "06:00"}],
+            schedules=[{"id": 1, "date": "2026-05-23", "weekly": False, "start_time": "00:20", "end_time": "06:00"}],
             devices=[{"name": DEVICE_NAME, "sn": "XP000000000000"}],
             status="充電樁已就緒",
         )
@@ -106,7 +106,7 @@ class DailyWorkflowTest(unittest.TestCase):
 
     def test_skips_when_target_date_tomorrow_already_has_schedule(self) -> None:
         client = FakeClient(
-            schedules=[{"id": 2, "date": "2026-05-24", "weekly": False, "start_time": "00:30", "end_time": "06:00"}],
+            schedules=[{"id": 2, "date": "2026-05-24", "weekly": False, "start_time": "00:20", "end_time": "06:00"}],
             devices=[{"name": DEVICE_NAME, "sn": "XP000000000000"}],
             status="充電樁已就緒",
         )
@@ -134,7 +134,7 @@ class DailyWorkflowTest(unittest.TestCase):
         self.assertEqual(client.created[0][0], "XP000000000000")
         self.assertEqual(
             client.created[0][1],
-            {"weekly": False, "date": "2026-05-23", "start_time": "00:30", "end_time": "06:00", "enable": True},
+            {"weekly": False, "date": "2026-05-23", "start_time": "00:20", "end_time": "06:00", "enable": True},
         )
 
     def test_skips_when_target_device_status_is_other(self) -> None:

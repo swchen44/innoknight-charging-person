@@ -3,24 +3,27 @@
 # - 手動觸發（workflow_dispatch）：預設 dry-run，勾選 apply 才會真的寫入。
 #   Phase 2 的 go/no-go 驗證就是手動觸發 dry-run。
 # - 排程觸發（schedule）：Phase 4 已啟用，**兩輪備援**。
-#   第一輪 UTC 12:30 = 台北 20:30（前一晚），與離峰窗口開始時間（00:30）保留 4 小時緩衝。
-#   2026-08-30 起實測排程觸發器延遲落在 3.5–5.8 小時（超過 GitHub 官方文件引用的
-#   15 分鐘–2 小時案例，見 PDCA.md），原本 22:05 觸發只有 2h25m 緩衝不夠，
-#   2026-09-03 改為 20:30 觸發、緩衝拉高到 4 小時。即使延遲把執行時間推過午夜，
-#   target_date 是每次執行當下重新算的「明天」，不會因此建立錯誤日期的預約
-#   （細節見 PDCA.md「延遲與 target_date 自我修正」）。
-#   第二輪 UTC 13:00 = 台北 21:00，晚 30 分鐘、緩衝 3.5 小時（比第一輪略窄，是
-#   「多一次機會」與「維持緩衝」之間的取捨）。2026-09-03 起原自管主機已停用、
-#   雲端版無後備，加第二輪是為了在同一晚內再給 reCAPTCHA／裝置就緒狀態一次機會。
-#   **不需要額外的「檢查」邏輯**——`run_daily_workflow`／`has_equivalent_schedule`
-#   本身就是冪等的：第二輪執行時若第一輪已成功建立明天的預約，會直接判定
-#   「已存在」並跳過，不會重複建立；若第一輪失敗，第二輪就是完整重跑一次
-#   （含自己的最多 5 次登入重試）。兩輪共用同一個 concurrency group，靠下方
-#   `queue: max` 確保依序執行、互不取消（見 PDCA.md 對此設定的查證）。
+#   第一輪 UTC 07:30 = 台北 15:30（前一天下午），與離峰窗口開始時間（00:20）保留
+#   約 8h50m 緩衝。2026-08-30 起實測排程觸發器延遲落在 3.5–5.8 小時（超過 GitHub
+#   官方文件引用的 15 分鐘–2 小時案例，見 PDCA.md），2026-09-03 先改到 20:30
+#   （緩衝 4 小時），同日再提早到 15:30——目的是讓「第二輪」在第一輪失敗時也還有
+#   充分時間完成自己的重試，而不是被同樣的延遲壓縮到窗口邊緣。即使延遲把執行時間
+#   推過午夜，target_date 是每次執行當下重新算的「明天」，不會因此建立錯誤日期的
+#   預約（細節見 PDCA.md「延遲與 target_date 自我修正」）。
+#   **權衡揭露**：15:30 是台北時間下午，對許多人的作息而言車輛可能還沒回家插上
+#   充電——若近期常在這個時間點撞到 `device_not_ready`，代表觸發時間比實際回家
+#   時間早太多，需要往後調整（見 design.md §4 第 1 條）。
+#   第二輪 UTC 08:00 = 台北 16:00，晚 30 分鐘、緩衝約 8h20m。2026-09-03 起原自管
+#   主機已停用、雲端版無後備，加第二輪是為了在同一晚內再給 reCAPTCHA／裝置就緒
+#   狀態一次機會。**不需要額外的「檢查」邏輯**——`run_daily_workflow`／
+#   `has_equivalent_schedule` 本身就是冪等的：第二輪執行時若第一輪已成功建立
+#   明天的預約，會直接判定「已存在」並跳過，不會重複建立；若第一輪失敗，第二輪
+#   就是完整重跑一次（含自己的最多 5 次登入重試）。兩輪共用同一個 concurrency
+#   group，靠下方 `queue: max` 確保依序執行、互不取消（見 PDCA.md 對此設定的查證）。
 #   排程觸發一律視為正式執行（--execute）。
-#   充電時段：預設／Variables 落回 00:30-06:00（真正離峰時段）。曾在辨識期
-#   暫時改為 07:00-10:00 與原自管主機的 00:30-06:00 區分，供人工核對雲端版是否
-#   設定成功；核對穩定後已於 2026-09-03 改回離峰，原主機仍先不停，繼續觀察。
+#   充電時段：預設／Variables 為 00:20-06:00（真正離峰時段，2026-09-03 從 00:30
+#   調整）。曾在辨識期暫時改為 07:00-10:00 與原自管主機的舊時段區分，供人工核對
+#   雲端版是否設定成功；核對穩定後已改回離峰，原主機已於同日停用。
 #
 # workflow_dispatch 額外參數（target_offset_days/start_time/end_time）：一般用途的
 # 覆寫參數，不限於補洞——例如想臨時測試不同時段、或某天排程失敗想補當天
@@ -46,7 +49,7 @@ on:
         type: string
         default: ""
       start_time:
-        description: "充電開始時間 HH:MM（留空 = 用 Variables/預設 00:30）"
+        description: "充電開始時間 HH:MM（留空 = 用 Variables/預設 00:20）"
         type: string
         default: ""
       end_time:
@@ -54,8 +57,8 @@ on:
         type: string
         default: ""
   schedule:
-    - cron: "30 12 * * *"  # 第一輪：UTC = 台北 20:30（前一晚），4 小時緩衝
-    - cron: "0 13 * * *"   # 第二輪備援：UTC = 台北 21:00（前一晚），晚 30 分鐘
+    - cron: "30 7 * * *"  # 第一輪：UTC = 台北 15:30（前一天下午），約 8h50m 緩衝
+    - cron: "0 8 * * *"   # 第二輪備援：UTC = 台北 16:00（前一天下午），晚 30 分鐘
 
 permissions:
   contents: read
@@ -98,7 +101,7 @@ jobs:
           INNOKNIGHT_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           # inputs.* 只在 workflow_dispatch 有值，schedule 觸發時是 null，
           # || 會安全落回 Variables → code 預設，不會讓排程觸發出錯。
-          INNOKNIGHT_START_TIME: ${{ inputs.start_time || vars.INNOKNIGHT_START_TIME || '00:30' }}
+          INNOKNIGHT_START_TIME: ${{ inputs.start_time || vars.INNOKNIGHT_START_TIME || '00:20' }}
           INNOKNIGHT_END_TIME: ${{ inputs.end_time || vars.INNOKNIGHT_END_TIME || '06:00' }}
           INNOKNIGHT_TARGET_OFFSET_DAYS: ${{ inputs.target_offset_days || '1' }}
         run: |
