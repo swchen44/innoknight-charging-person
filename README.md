@@ -6,10 +6,11 @@ iot.innoknight.com，替你建立隔天的充電預約。不用自己顧主機�
 本專案是 [innoknight-charging-scheduler](https://github.com/swchen44/innoknight-charging-scheduler)
 的雲端化版本（該 repo 跑在自管主機的 crontab 上）。
 
-> **目前狀態（2026-09-03 起）：正式離峰時段、原自管主機先不停。** 辨識期（雲端版
-> 暫用 07:00–10:00 供人工核對）已結束，雲端版與自管主機現在都設定真正的離峰
-> **00:30–06:00**；原主機先不停，繼續觀察雲端版穩定性一段時間後再讓其退場。
-> 時段由 GitHub Variables 控制，改時段不需要動程式碼。
+> **目前狀態（2026-09-03 起）：原自管主機已停用，雲端版是唯一運作中的系統。**
+> 辨識期（雲端版暫用 07:00–10:00 供人工核對）已結束，時段改回真正的離峰
+> **00:30–06:00**。**這代表沒有後備了**——若雲端版某晚失敗（例如 reCAPTCHA
+> 5 次重試全被拒），當晚不會有任何系統補上，需要人工介入（見下方「補洞」）。
+> 建議近期每天早上都檢查一次 [Actions 頁](../../actions/workflows/daily-schedule.yml)。
 
 ## 運作方式
 
@@ -96,6 +97,11 @@ gh workflow run daily-schedule.yml -f apply=true -f target_offset_days=0 \
 
 ## 注意事項
 
+- **無後備系統**：原自管主機已於 2026-09-03 停用，雲端版是唯一負責充電排程的系統。
+  若某晚失敗（reCAPTCHA 5 次重試全被拒、InnoKnight 改版、GitHub Actions 本身異常等），
+  當晚沒有其他系統會補上，車可能沒充到電。**紅燈會寄失敗通知信，收到要當天處理**——
+  用「[手動指定日期或時段](#手動指定日期或時段)」立即補建，不要等下一輪自動排程。
+  建議近期（累積更多穩定性數據前）每天早上都花幾秒看一眼 Actions 頁。
 - **60 天規則（已根治）**：公開 repo 的排程 workflow 在 60 天沒有 push/PR 活動後會被
   GitHub 自動停用。本 repo 的 `keepalive.yml` 每月 1、15 號自動 push 一個時間戳
   重置計時，正常情況不需人工介入（若 keepalive 故障，GitHub 停用前仍會寄警告信作為後備）。
@@ -133,5 +139,6 @@ uv run python -m innoknight_scheduler.browser_session --execute  # 正式
 | **Phase 2 dry-run 驗證 IP 風控（go/no-go）** | ✅ **GO——端到端跑通**（見 [PDCA.md](docs/PDCA.md)） |
 | 真實寫入驗證（apply + 冪等回查） | ✅ 完成（見 [PDCA.md](docs/PDCA.md)） |
 | **Phase 4 啟用每晚自動排程** | ✅ 已啟用；辨識期已結束、已改回離峰 00:30–06:00 |
-| Phase 4 後續：穩定性量測、舊系統退場 | ⬜ 進行中，原主機先不停，持續觀察中 |
+| **舊系統退場** | ✅ 原自管主機已停用（2026-09-03）——雲端版是唯一系統，無後備 |
+| Phase 4 後續：持續穩定性量測 | ⬜ 進行中，見下方注意事項與 [PDCA.md](docs/PDCA.md) |
 | Phase 5 模板化分享（未來） | ⬜ |
