@@ -8,6 +8,10 @@
 #   辨識期：充電時段用 Variables 設為 07:00-10:00（非離峰），與原自管主機的
 #   00:30-06:00 區分，供人工核對雲端版是否設定成功；兩邊並行、原主機不停。
 #
+# 補洞（手動 dispatch 專用參數）：target_offset_days/start_time/end_time 留空時
+# 分別落回 code 預設（明天/00:30/06:00）或 Variables，schedule 觸發不受影響。
+# 例：某天自動排程失敗漏建，隔天想補當天（不是明天）的預約，用
+# target_offset_days=0 + apply=true 手動跑一次。
 # 瀏覽器：預設 headful（指紋較真實，為了通過 reCAPTCHA），需要 Xvfb 提供虛擬顯示；
 # 程式已自動帶入 --disable-gpu（runner 無 GPU，headful 少了它會卡 CDP 逾時，2026-08 實測）。
 #
@@ -23,6 +27,18 @@ on:
         description: "實際寫入 InnoKnight（不勾 = dry-run，只讀不寫）"
         type: boolean
         default: false
+      target_offset_days:
+        description: "補洞用：target_date = 今天 + N 天（留空 = 預設 1，明天；0 = 今天）"
+        type: string
+        default: ""
+      start_time:
+        description: "補洞用：充電開始時間 HH:MM（留空 = 用 Variables/預設 00:30）"
+        type: string
+        default: ""
+      end_time:
+        description: "補洞用：充電結束時間 HH:MM（留空 = 用 Variables/預設 06:00）"
+        type: string
+        default: ""
   schedule:
     - cron: "5 14 * * *"  # UTC = 台北 22:05（前一晚），target_date = 明天
 
@@ -60,8 +76,11 @@ jobs:
           INNOKNIGHT_PASSWORD: ${{ secrets.INNOKNIGHT_PASSWORD }}
           INNOKNIGHT_DEVICE_NAME: ${{ secrets.INNOKNIGHT_DEVICE_NAME }}
           INNOKNIGHT_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-          INNOKNIGHT_START_TIME: ${{ vars.INNOKNIGHT_START_TIME || '00:30' }}
-          INNOKNIGHT_END_TIME: ${{ vars.INNOKNIGHT_END_TIME || '06:00' }}
+          # inputs.* 只在 workflow_dispatch 有值，schedule 觸發時是 null，
+          # || 會安全落回 Variables → code 預設，不會讓排程觸發出錯。
+          INNOKNIGHT_START_TIME: ${{ inputs.start_time || vars.INNOKNIGHT_START_TIME || '00:30' }}
+          INNOKNIGHT_END_TIME: ${{ inputs.end_time || vars.INNOKNIGHT_END_TIME || '06:00' }}
+          INNOKNIGHT_TARGET_OFFSET_DAYS: ${{ inputs.target_offset_days || '1' }}
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
             uv run python -m innoknight_scheduler.browser_session --execute
