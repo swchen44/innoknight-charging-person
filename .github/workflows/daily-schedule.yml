@@ -97,7 +97,8 @@ jobs:
           PYTHONUNBUFFERED: "1"
           INNOKNIGHT_USERNAME: ${{ secrets.INNOKNIGHT_USERNAME }}
           INNOKNIGHT_PASSWORD: ${{ secrets.INNOKNIGHT_PASSWORD }}
-          INNOKNIGHT_DEVICE_NAME: ${{ secrets.INNOKNIGHT_DEVICE_NAME }}
+          # 非機密設備名稱放 Variables，方便從公開 log 核對實際比對字串。
+          INNOKNIGHT_DEVICE_NAME: ${{ vars.INNOKNIGHT_DEVICE_NAME }}
           INNOKNIGHT_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           # inputs.* 只在 workflow_dispatch 有值，schedule 觸發時是 null，
           # || 會安全落回 Variables → code 預設，不會讓排程觸發出錯。

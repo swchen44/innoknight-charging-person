@@ -40,19 +40,19 @@ iot.innoknight.com，替你建立隔天的充電預約。不用自己顧主機�
 
 ## 快速開始
 
-### 1. 設定 Secrets（帳號、密碼、充電樁名稱）
+### 1. 設定 Secrets 與 Variable（帳號、密碼、充電樁名稱）
 
-三個都用 Secrets——本 repo 是公開的，執行 log 全世界可讀，充電樁名稱含建案與
-車位號碼，放 Secrets 才會在 log 中自動遮罩。用 `gh` CLI（或 GitHub 網頁
+帳號與密碼用 Secrets。充電樁名稱改用 Variable，方便 debug 時直接從公開 log 核對。
+本 repo 是公開的，設備名稱會出現在 Actions log。用 `gh` CLI（或 GitHub 網頁
 Settings → Secrets and variables → Actions）：
 
 ```bash
 gh secret set INNOKNIGHT_USERNAME     # InnoKnight 帳號（email 或手機）
 gh secret set INNOKNIGHT_PASSWORD     # InnoKnight 密碼
-gh secret set INNOKNIGHT_DEVICE_NAME  # 充電樁完整名稱（照網站上顯示的打）
+gh variable set INNOKNIGHT_DEVICE_NAME --body "充電樁完整名稱"
 ```
 
-充電時段由 Variables（非機密）控制，**目前為真正離峰的 00:20–06:00**（辨識期已結束，
+充電時段與設備名稱由 Variables（非機密）控制，**目前為真正離峰的 00:20–06:00**（辨識期已結束，
 見文首「目前狀態」；此為 code 內建預設，即使不設 Variables 也會用這個值）：
 
 ```bash
