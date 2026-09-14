@@ -32,6 +32,14 @@ DEFAULT_CHROME_PATH = "/usr/bin/google-chrome"
 CONFIG_ERROR_REASONS = {"device_not_found", "device_missing_schedule_target"}
 
 
+def write_device_list(devices: list[dict[str, Any]], output_path: str | Path) -> None:
+    """Write a numbered device-name list without exporting device IDs or serial numbers."""
+
+    names = [str(device["name"]) for device in devices if device.get("name")]
+    content = "".join(f"{index}\t{name}\n" for index, name in enumerate(names, start=1))
+    Path(output_path).write_text(content, encoding="utf-8")
+
+
 @dataclass(frozen=True)
 class BrowserLoginConfig:
     """瀏覽器登入流程需要的帳密、CDP port 與 Chromium 啟動設定。"""
@@ -569,6 +577,16 @@ def main() -> int:
     load_dotenv(override=True)
     parser = argparse.ArgumentParser(description="Cron-safe InnoKnight browser-session charging scheduler")
     parser.add_argument("--execute", action="store_true", help="Perform remote mutations. Default is dry-run.")
+    parser.add_argument(
+        "--list-devices",
+        action="store_true",
+        help="List all device names to a file; read-only and does not require INNOKNIGHT_DEVICE_NAME.",
+    )
+    parser.add_argument(
+        "--devices-output",
+        default="innoknight-devices.txt",
+        help="Output path used with --list-devices.",
+    )
     parser.add_argument("--device-name", default=os.getenv("INNOKNIGHT_DEVICE_NAME"))
     parser.add_argument("--start-time", default=os.getenv("INNOKNIGHT_START_TIME", "00:20"))
     parser.add_argument("--end-time", default=os.getenv("INNOKNIGHT_END_TIME", "06:00"))
@@ -588,7 +606,7 @@ def main() -> int:
     password = os.getenv("INNOKNIGHT_PASSWORD")
     if not username or not password:
         raise SystemExit("Set INNOKNIGHT_USERNAME and INNOKNIGHT_PASSWORD (GitHub Secrets or .env)")
-    if not args.device_name:
+    if not args.device_name and not args.list_devices:
         raise SystemExit("Set INNOKNIGHT_DEVICE_NAME (GitHub Secrets or .env); there is no default device")
 
     print("Starting browser-session login flow")
@@ -606,6 +624,12 @@ def main() -> int:
 
     client = InnoKnightClient()
     client.session = session
+    if args.list_devices:
+        devices = client.list_devices()
+        write_device_list(devices, args.devices_output)
+        print(f"設備清單完成: count={len(devices)} output={args.devices_output}")
+        return 0
+
     config = AutomationConfig(
         device_name=args.device_name,
         start_time=args.start_time,

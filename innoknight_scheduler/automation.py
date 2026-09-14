@@ -38,7 +38,7 @@ class AutomationClient(Protocol):
 
     def remove_schedule(self, schedule_id: int | str) -> dict[str, Any]: ...
 
-    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]: ...
+    def list_devices(self, keyword: str = "", *, stop_name: str | None = None) -> list[dict[str, Any]]: ...
 
     def get_device_status(self, device: dict[str, Any]) -> str: ...
 
@@ -117,14 +117,14 @@ def run_daily_workflow(
         result.log_lines.append(f"{target_date.isoformat()} 已存在相同預約，結束流程。")
         return result
 
-    devices = client.list_devices(config.device_name)
+    devices = client.list_devices(config.device_name, stop_name=config.device_name)
     device_names = [str(item.get("name")) for item in devices if item.get("name")]
     result.log_lines.append(
         f"設備查找: keyword={config.device_name} count={len(devices)} names={device_names}"
     )
     device = _find_device(devices, config.device_name)
     if device is None:
-        unfiltered_devices = client.list_devices()
+        unfiltered_devices = client.list_devices(stop_name=config.device_name)
         unfiltered_device = _find_device(unfiltered_devices, config.device_name)
         matched_name = unfiltered_device.get("name") if unfiltered_device else None
         result.log_lines.append(

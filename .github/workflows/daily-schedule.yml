@@ -33,8 +33,9 @@
 # 程式已自動帶入 --disable-gpu（runner 無 GPU，headful 少了它會卡 CDP 逾時，2026-08 實測）。
 #
 # 供應鏈規則：所有第三方 Action 釘死完整 commit SHA，permissions 最小化。
-# 公開 repo 注意：本 workflow 的 log 全世界可讀；裝置名稱屬個人資訊，
-# 因此放 Secrets（自動遮罩），不放 Variables。
+# 公開 repo 注意：本 workflow 的 log 全世界可讀；設備名稱不是登入憑證，
+# 放 Variables 方便核對，帳密才放 Secrets。完整設備清單只在手動 list_devices
+# 模式輸出成短期 artifact。
 name: daily-schedule
 
 on:
@@ -56,6 +57,10 @@ on:
         description: "充電結束時間 HH:MM（留空 = 用 Variables/預設 06:00）"
         type: string
         default: ""
+      list_devices:
+        description: "列出目前帳號的所有設備名稱（只讀，輸出 artifact）"
+        type: boolean
+        default: false
   schedule:
     - cron: "30 7 * * *"  # 第一輪：UTC = 台北 15:30（前一天下午），約 8h50m 緩衝
     - cron: "0 8 * * *"   # 第二輪備援：UTC = 台北 16:00（前一天下午），晚 30 分鐘
@@ -106,8 +111,18 @@ jobs:
           INNOKNIGHT_END_TIME: ${{ inputs.end_time || vars.INNOKNIGHT_END_TIME || '06:00' }}
           INNOKNIGHT_TARGET_OFFSET_DAYS: ${{ inputs.target_offset_days || '1' }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+          if [ "${{ inputs.list_devices }}" = "true" ]; then
+            uv run python -m innoknight_scheduler.browser_session --list-devices --devices-output innoknight-devices.txt
+          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
             uv run python -m innoknight_scheduler.browser_session --execute
           else
             uv run python -m innoknight_scheduler.browser_session
           fi
+
+      - name: Upload device list
+        if: ${{ inputs.list_devices }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: innoknight-device-list-${{ github.run_id }}
+          path: innoknight-devices.txt
+          retention-days: 7

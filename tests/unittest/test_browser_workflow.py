@@ -52,6 +52,30 @@ def test_innoknight_client_lists_devices_across_pages() -> None:
     assert [body["page"] for body in calls] == [1, 2]
 
 
+def test_innoknight_client_stops_paging_after_target_is_found() -> None:
+    page_one = [{"name": f"設備-{index}"} for index in range(25)]
+    page_two = [{"name": DEVICE_NAME, "device_id": 1124}]
+    calls: list[dict[str, Any]] = []
+    client = InnoKnightClient()
+    client.session = InnoKnightSession(user_id="user-1", token="token-1", raw_user={})
+
+    def fake_post_mqtt(endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert endpoint == "get_devices"
+        calls.append(body)
+        if body["page"] == 1:
+            return {"data": page_one}
+        if body["page"] == 2:
+            return {"data": page_two}
+        raise AssertionError("device lookup should stop after the target is found")
+
+    client.post_mqtt = fake_post_mqtt  # type: ignore[method-assign]
+
+    devices = client.list_devices(stop_name=DEVICE_NAME)
+
+    assert devices == page_one + page_two
+    assert [body["page"] for body in calls] == [1, 2]
+
+
 class ScheduleFallbackClient:
     def __init__(self) -> None:
         self.created: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -70,7 +94,7 @@ class ScheduleFallbackClient:
     def remove_schedule(self, schedule_id: int | str) -> dict[str, Any]:
         return {"success": True}
 
-    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]:
+    def list_devices(self, keyword: str = "", *, stop_name: str | None = None) -> list[dict[str, Any]]:
         return []
 
     def get_device_status(self, device: dict[str, Any]) -> str:

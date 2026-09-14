@@ -117,10 +117,11 @@ class InnoKnightClient:
             return []
         return [schedule for schedule in schedules if isinstance(schedule, dict)]
 
-    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]:
+    def list_devices(self, keyword: str = "", *, stop_name: str | None = None) -> list[dict[str, Any]]:
         limit = 25
         devices: list[dict[str, Any]] = []
-        for page in range(1, 101):
+        page = 1
+        while True:
             data = self.post_mqtt(
                 "get_devices",
                 {"keyset": "mqtt", "keyword": _urlenc(keyword), "page": page, "limit": limit},
@@ -129,8 +130,11 @@ class InnoKnightClient:
             if not isinstance(page_data, list):
                 return devices
             devices.extend(device for device in page_data if isinstance(device, dict))
+            if stop_name is not None and any(device.get("name") == stop_name for device in page_data):
+                break
             if len(page_data) < limit:
                 break
+            page += 1
         return devices
 
     def get_device_status(self, device: dict[str, Any]) -> str:

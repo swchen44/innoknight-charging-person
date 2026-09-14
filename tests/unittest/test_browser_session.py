@@ -12,6 +12,7 @@ from innoknight_scheduler.browser_session import (
     build_click_login_script,
     build_focus_script,
     parse_user_cookie,
+    write_device_list,
 )
 
 
@@ -44,6 +45,17 @@ def test_parse_user_cookie_extracts_session_without_logging_full_cookie() -> Non
     assert session.user_id == "user-1234"
     assert session.token == "secret-token"
     assert session.raw_user == user
+
+
+def test_write_device_list_outputs_only_numbered_names(tmp_path) -> None:
+    output_path = tmp_path / "devices.txt"
+
+    write_device_list(
+        [{"name": "設備-A", "device_id": 1}, {"name": "設備-B", "sn": "secret"}],
+        output_path,
+    )
+
+    assert output_path.read_text(encoding="utf-8") == "1\t設備-A\n2\t設備-B\n"
 
 
 def test_focus_scripts_locate_login_fields_without_any_credentials() -> None:

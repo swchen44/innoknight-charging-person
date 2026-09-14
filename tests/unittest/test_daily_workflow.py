@@ -33,7 +33,7 @@ class FakeClient:
         self.removed.append(schedule_id)
         return {"success": True}
 
-    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]:
+    def list_devices(self, keyword: str = "", *, stop_name: str | None = None) -> list[dict[str, Any]]:
         return [device for device in self.devices if keyword in device.get("name", "")]
 
     def get_device_status(self, device: dict[str, Any]) -> str:
@@ -45,7 +45,7 @@ class FakeClient:
 
 
 class KeywordBlindClient(FakeClient):
-    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]:
+    def list_devices(self, keyword: str = "", *, stop_name: str | None = None) -> list[dict[str, Any]]:
         if keyword:
             return []
         return list(self.devices)
