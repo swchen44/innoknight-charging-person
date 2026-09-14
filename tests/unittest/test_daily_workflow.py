@@ -175,7 +175,10 @@ class DailyWorkflowTest(unittest.TestCase):
         result = run_daily_workflow(client, self.config(), today=date(2026, 5, 23), execute=False)
 
         self.assertTrue(result.created)
-        self.assertIn("設備查找(空 keyword): count=1 names=['測試充電樁A-1']", result.log_lines)
+        self.assertIn(
+            "設備查找(空 keyword): count=1 exact_match=True name=測試充電樁A-1",
+            result.log_lines,
+        )
 
 
 if __name__ == "__main__":

@@ -125,13 +125,13 @@ def run_daily_workflow(
     device = _find_device(devices, config.device_name)
     if device is None:
         unfiltered_devices = client.list_devices()
-        unfiltered_device_names = [
-            str(item.get("name")) for item in unfiltered_devices if item.get("name")
-        ]
+        unfiltered_device = _find_device(unfiltered_devices, config.device_name)
+        matched_name = unfiltered_device.get("name") if unfiltered_device else None
         result.log_lines.append(
-            f"設備查找(空 keyword): count={len(unfiltered_devices)} names={unfiltered_device_names}"
+            f"設備查找(空 keyword): count={len(unfiltered_devices)} "
+            f"exact_match={unfiltered_device is not None} name={matched_name}"
         )
-        device = _find_device(unfiltered_devices, config.device_name)
+        device = unfiltered_device
     if device is None:
         # get_devices 有時搜不到特定社區充電樁；既有排程裡的 Device.name
         # 反而保有可用的 device_id，因此作為安全 fallback。
