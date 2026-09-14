@@ -32,6 +32,26 @@ def test_innoknight_client_sets_schedule_by_encrypted_device_id_when_available()
     assert captured["body"]["device_id"] != "1124"
 
 
+def test_innoknight_client_lists_devices_across_pages() -> None:
+    page_one = [{"name": f"設備-{index}"} for index in range(25)]
+    page_two = [{"name": DEVICE_NAME, "device_id": 1124}]
+    calls: list[dict[str, Any]] = []
+    client = InnoKnightClient()
+    client.session = InnoKnightSession(user_id="user-1", token="token-1", raw_user={})
+
+    def fake_post_mqtt(endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert endpoint == "get_devices"
+        calls.append(body)
+        return {"data": page_one if body["page"] == 1 else page_two}
+
+    client.post_mqtt = fake_post_mqtt  # type: ignore[method-assign]
+
+    devices = client.list_devices()
+
+    assert devices == page_one + page_two
+    assert [body["page"] for body in calls] == [1, 2]
+
+
 class ScheduleFallbackClient:
     def __init__(self) -> None:
         self.created: list[tuple[dict[str, Any], dict[str, Any]]] = []
