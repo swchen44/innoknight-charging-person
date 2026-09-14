@@ -44,6 +44,13 @@ class FakeClient:
         return {"success": True}
 
 
+class KeywordBlindClient(FakeClient):
+    def list_devices(self, keyword: str = "") -> list[dict[str, Any]]:
+        if keyword:
+            return []
+        return list(self.devices)
+
+
 class DailyWorkflowTest(unittest.TestCase):
     def config(self) -> AutomationConfig:
         return AutomationConfig(
@@ -158,6 +165,17 @@ class DailyWorkflowTest(unittest.TestCase):
         self.assertEqual(result.skipped_reason, "device_not_found")
         self.assertIn("設備查找: keyword=測試充電樁A-1 count=0 names=[]", result.log_lines)
         self.assertIn("既有預約設備名稱: []", result.log_lines)
+
+    def test_falls_back_to_unfiltered_device_search(self) -> None:
+        client = KeywordBlindClient(
+            devices=[{"name": DEVICE_NAME, "sn": "XP000000000000"}],
+            status="充電樁已就緒",
+        )
+
+        result = run_daily_workflow(client, self.config(), today=date(2026, 5, 23), execute=False)
+
+        self.assertTrue(result.created)
+        self.assertIn("設備查找(空 keyword): count=1 names=['測試充電樁A-1']", result.log_lines)
 
 
 if __name__ == "__main__":
