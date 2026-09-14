@@ -11,8 +11,8 @@ from .scheduler import build_schedule_payload, cleanup_candidates, has_equivalen
 class AutomationConfig:
     """每日充電預約流程的可調整參數。
 
-    `device_name` 沒有預設值：本專案是公開 repo，裝置名稱屬於個人資訊，
-    一律由環境變數（GitHub Secrets）提供。
+    `device_name` 沒有預設值：本專案是公開 repo，裝置名稱由環境變數提供；
+    GitHub Actions 使用 Variables，帳密才使用 Secrets。
     """
 
     device_name: str
@@ -117,10 +117,21 @@ def run_daily_workflow(
         result.log_lines.append(f"{target_date.isoformat()} 已存在相同預約，結束流程。")
         return result
 
-    device = _find_device(client.list_devices(config.device_name), config.device_name)
+    devices = client.list_devices(config.device_name)
+    device_names = [str(item.get("name")) for item in devices if item.get("name")]
+    result.log_lines.append(
+        f"設備查找: keyword={config.device_name} count={len(devices)} names={device_names}"
+    )
+    device = _find_device(devices, config.device_name)
     if device is None:
         # get_devices 有時搜不到特定社區充電樁；既有排程裡的 Device.name
         # 反而保有可用的 device_id，因此作為安全 fallback。
+        schedule_device_names = []
+        for schedule in schedules:
+            nested = schedule.get("Device")
+            if isinstance(nested, dict) and nested.get("name"):
+                schedule_device_names.append(str(nested["name"]))
+        result.log_lines.append(f"既有預約設備名稱: {schedule_device_names}")
         device = _find_device_from_schedules(schedules, config.device_name)
     if device is None:
         result.skipped_reason = "device_not_found"

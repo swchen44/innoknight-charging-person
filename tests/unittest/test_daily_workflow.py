@@ -156,6 +156,8 @@ class DailyWorkflowTest(unittest.TestCase):
         result = run_daily_workflow(client, self.config(), today=date(2026, 5, 23), execute=True)
 
         self.assertEqual(result.skipped_reason, "device_not_found")
+        self.assertIn("設備查找: keyword=測試充電樁A-1 count=0 names=[]", result.log_lines)
+        self.assertIn("既有預約設備名稱: []", result.log_lines)
 
 
 if __name__ == "__main__":
