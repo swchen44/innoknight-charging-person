@@ -12,6 +12,7 @@ from innoknight_scheduler.browser_session import (
     build_chrome_command,
     build_click_login_script,
     build_focus_script,
+    default_chrome_path,
     parse_user_cookie,
     write_device_list,
 )
@@ -46,6 +47,11 @@ def test_chrome_command_headful_skips_xvfb_on_macos(monkeypatch) -> None:
 
     assert command[0] != "xvfb-run"
     assert command[-1] == "about:blank"
+
+
+def test_default_chrome_path_matches_platform() -> None:
+    assert default_chrome_path("linux") == "/usr/bin/google-chrome"
+    assert default_chrome_path("darwin") == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
 def test_parse_user_cookie_extracts_session_without_logging_full_cookie() -> None:

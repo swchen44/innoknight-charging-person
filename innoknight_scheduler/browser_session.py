@@ -24,9 +24,20 @@ from .client import InnoKnightClient, InnoKnightSession
 LOGIN_URL = "https://iot.innoknight.com/#/"
 DEFAULT_CDP_PORT = 9224
 DEFAULT_PROFILE_DIR = "/tmp/chrome-innoknight-cron"
-# GitHub Actions Ubuntu runner 預裝 Google Chrome；正式路徑由
-# INNOKNIGHT_CHROME_PATH 提供（workflow 內用 setup-chrome 的輸出）。
-DEFAULT_CHROME_PATH = "/usr/bin/google-chrome"
+
+
+def default_chrome_path(platform_name: str | None = None) -> str:
+    """Return the native Chrome path for Linux or macOS."""
+
+    platform_name = platform_name or sys.platform
+    if platform_name.startswith("darwin"):
+        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    # GitHub Actions Ubuntu runner 預裝 Google Chrome；正式路徑也可由
+    # INNOKNIGHT_CHROME_PATH 覆寫（workflow 內用 setup-chrome 的輸出）。
+    return "/usr/bin/google-chrome"
+
+
+DEFAULT_CHROME_PATH = default_chrome_path()
 
 # 設定錯誤（永遠不會自己好）→ 非 0，讓 GitHub Actions 失敗通知信變成告警管道。
 # device_not_ready 等「今天本來就不用做事」的情況維持 0。
