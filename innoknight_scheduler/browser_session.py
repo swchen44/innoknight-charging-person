@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -58,10 +59,10 @@ class BrowserLoginConfig:
     chrome_path: str = DEFAULT_CHROME_PATH
     profile_dir: str = DEFAULT_PROFILE_DIR
     # 預設 headful（headless=False）：headful 的瀏覽器指紋比 headless 真實得多，
-    # 是通過 InnoKnight reCAPTCHA 的關鍵（見 docs/PDCA.md）。headful 在 GH Actions
-    # 無頭環境需要 Xvfb 提供虛擬顯示，且**必須**用 --disable-gpu（runner 無 GPU，
-    # headful Chrome 預設會卡在 GPU 初始化直到 CDP 逾時；2026-08 實測 --disable-gpu
-    # 一加即 1 秒起 CDP）。這些旗標由 build_chrome_command 自動帶入。
+    # 是通過 InnoKnight reCAPTCHA 的關鍵（見 docs/PDCA.md）。headful 在 Linux 的
+    # GH Actions 無頭環境需要 Xvfb，macOS 則使用原生視窗；兩者都用 --disable-gpu
+    #（runner/本機 GPU 狀態不穩，2026-08 實測加上後 CDP 啟動穩定）。這些旗標由
+    # build_chrome_command 自動帶入。
     headless: bool = False
 
 
@@ -305,7 +306,8 @@ class CdpClient:
 def build_chrome_command(config: BrowserLoginConfig) -> list[str]:
     """組出啟動 Chrome 的完整指令。
 
-    headful（預設）以 xvfb-run 包裝提供虛擬顯示；headless 直接啟動。
+    Linux 的 headful（預設）以 xvfb-run 包裝提供虛擬顯示；macOS 的 headful
+    直接使用原生視窗；headless 在兩個平台都直接啟動。
     --disable-gpu 對兩種模式都加：runner 無 GPU，headful 少了它會卡在
     GPU 初始化直到 CDP 逾時（2026-08 GH Actions 實測，見 docs/PDCA.md）。
     """
@@ -326,7 +328,7 @@ def build_chrome_command(config: BrowserLoginConfig) -> list[str]:
     ]
     if config.headless:
         command.append("--headless=new")
-    else:
+    elif sys.platform.startswith("linux"):
         command = ["xvfb-run", "-a", *command]
     command.append("about:blank")
     return command

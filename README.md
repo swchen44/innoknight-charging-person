@@ -17,8 +17,9 @@ iot.innoknight.com，替你建立隔天的充電預約。不用自己顧主機�
 每天台北時間**前一天下午 15:30 與 16:00 各觸發一輪**（UTC cron `30 7 * * *` /
 `0 8 * * *`）：
 
-1. 用 Chrome（**headful** + `--disable-gpu` + Xvfb + CDP）登入 InnoKnight——headful
-   真實指紋是通過網站 reCAPTCHA 的關鍵；被 reCAPTCHA 間歇性拒絕時會重載頁面重試最多 5 次
+1. 用 Chrome（**headful** + `--disable-gpu` + CDP）登入 InnoKnight——Linux 以 Xvfb
+   提供虛擬顯示，macOS 使用原生視窗；headful 真實指紋是通過網站 reCAPTCHA 的關鍵。
+   被 reCAPTCHA 間歇性拒絕時會重載頁面重試最多 5 次
    （完整驗證見 [docs/PDCA.md](docs/PDCA.md)）。
 2. 清理過期的一次性舊預約（保留最近一筆）。
 3. 若**明天**尚無相同時段預約、且充電樁狀態為「充電樁已就緒」，就自動建立
@@ -121,7 +122,8 @@ gh workflow run daily-schedule.yml -f apply=true -f target_offset_days=0 \
 
 ## 本機執行（開發／除錯）
 
-需要 Linux（xvfb-run + Chrome）。複製 `.env.example` 為 `.env` 填入設定後：
+Linux 會使用 `xvfb-run + Chrome`；macOS 直接使用原生 headful Chrome。複製
+`.env.example` 為 `.env` 填入設定後：
 
 ```bash
 uv venv --python 3.12 && uv pip install -e .

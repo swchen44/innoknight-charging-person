@@ -5,6 +5,7 @@ import urllib.parse
 
 import pytest
 
+import innoknight_scheduler.browser_session as browser_session
 from innoknight_scheduler.browser_session import (
     NOTIFY_ACTIVE_ELEMENT_SCRIPT,
     BrowserLoginConfig,
@@ -16,9 +17,11 @@ from innoknight_scheduler.browser_session import (
 )
 
 
-def test_chrome_command_defaults_to_headful_under_xvfb() -> None:
+def test_chrome_command_defaults_to_headful_under_xvfb(monkeypatch) -> None:
     # 預設 headful（headless=False）：指紋較真實、為了通過 reCAPTCHA（見 PDCA.md）。
     # headful 需要 xvfb-run 提供虛擬顯示，且必帶 --disable-gpu（否則卡 GPU 初始化）。
+    monkeypatch.setattr(browser_session.sys, "platform", "linux")
+
     command = build_chrome_command(BrowserLoginConfig(username="u", password="p"))
 
     assert command[:2] == ["xvfb-run", "-a"]
@@ -34,6 +37,15 @@ def test_chrome_command_headless_skips_xvfb_but_keeps_disable_gpu() -> None:
     assert command[0] != "xvfb-run"
     assert "--headless=new" in command
     assert "--disable-gpu" in command
+
+
+def test_chrome_command_headful_skips_xvfb_on_macos(monkeypatch) -> None:
+    monkeypatch.setattr(browser_session, "sys", type("FakeSys", (), {"platform": "darwin"})(), raising=False)
+
+    command = browser_session.build_chrome_command(BrowserLoginConfig(username="u", password="p"))
+
+    assert command[0] != "xvfb-run"
+    assert command[-1] == "about:blank"
 
 
 def test_parse_user_cookie_extracts_session_without_logging_full_cookie() -> None:
