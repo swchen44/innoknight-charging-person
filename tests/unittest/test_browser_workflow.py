@@ -32,6 +32,28 @@ def test_innoknight_client_sets_schedule_by_encrypted_device_id_when_available()
     assert captured["body"]["device_id"] != "1124"
 
 
+def test_innoknight_client_uses_api_device_id_before_serial_number() -> None:
+    captured: dict[str, Any] = {}
+    client = InnoKnightClient()
+    client.session = InnoKnightSession(user_id="user-1", token="token-1", raw_user={})
+
+    def fake_post_mqtt(endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+        captured["endpoint"] = endpoint
+        captured["body"] = body
+        return {"success": True}
+
+    client.post_mqtt = fake_post_mqtt  # type: ignore[method-assign]
+
+    client.set_schedule(
+        device={"name": DEVICE_NAME, "id": 1124, "sn": "XP012514000111"},
+        schedule_payload={"weekly": False, "date": "2026-05-24", "start_time": "00:20", "end_time": "06:00"},
+    )
+
+    assert captured["endpoint"] == "schedule_set"
+    assert "device_id" in captured["body"]
+    assert "device_sn" not in captured["body"]
+
+
 def test_innoknight_client_lists_devices_across_pages() -> None:
     page_one = [{"name": f"設備-{index}"} for index in range(25)]
     page_two = [{"name": DEVICE_NAME, "device_id": 1124}]

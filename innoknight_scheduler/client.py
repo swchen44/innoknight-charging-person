@@ -162,11 +162,10 @@ class InnoKnightClient:
         return "其他"
 
     def set_schedule(self, *, device: dict[str, Any], schedule_payload: dict[str, Any]) -> dict[str, Any]:
-        """新增或更新充電預約，優先使用排程來源的 `device_id`。
+        """新增或更新充電預約，優先使用 API 或排程來源的設備 ID。
 
-        InnoKnight 前端送出 `schedule_set` 時會把 `device_id` 以排程金鑰加密；
-        若缺少 `device_id`，才退回使用充電樁 SN。這能避免 get_devices 搜尋
-        不完整時仍無法建立預約。
+        `get_devices` 回傳 `id`，既有排程 fallback 回傳 `device_id`；兩者都要
+        以排程金鑰加密後送出。只有缺少設備 ID 時，才退回使用充電樁 SN。
         """
 
         if self.session is None:
@@ -175,7 +174,7 @@ class InnoKnightClient:
             "user_id": _urlenc(self.session.user_id),
             "schedule_data": self.encrypted_schedule_data(schedule_payload),
         }
-        device_id = device.get("device_id") or device.get("schedule_device_id")
+        device_id = device.get("device_id") or device.get("schedule_device_id") or device.get("id")
         if device_id is not None:
             # schedule_set 的 device_id 必須依網站前端行為加密後再 URL encode。
             body["device_id"] = _urlenc(innoknight_encrypt(str(device_id), key=SCHEDULE_KEY, iv=SCHEDULE_IV))
